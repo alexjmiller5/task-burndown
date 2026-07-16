@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { getIncrementalSince, mergeParsedData } from './merge.ts';
+import { getIncrementalSince, mergeParsedData, pruneDeletedTasks } from './merge.ts';
 import type { ParsedData, Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -76,4 +76,53 @@ test('getIncrementalSince: earlier of the two maxima', () => {
 
 test('getIncrementalSince: null for empty', () => {
 	expect(getIncrementalSince([])).toEqual(null);
+});
+
+const CUTOFF = '2026-04-01T00:00:00.000Z';
+
+test('pruneDeletedTasks: drops sweep-eligible tasks missing from the swept id set', () => {
+	const tasks = [
+		makeTask({ id: 'a', created: '2026-05-01T00:00:00.000Z' }),
+		makeTask({ id: 'b', created: '2026-05-01T00:00:00.000Z' }),
+		makeTask({ id: 'c', created: '2026-05-01T00:00:00.000Z' })
+	];
+	expect(pruneDeletedTasks(tasks, new Set(['a', 'c']), CUTOFF).map((t) => t.id)).toEqual([
+		'a',
+		'c'
+	]);
+});
+
+test('pruneDeletedTasks: keeps tasks outside the sweep heuristic (old, settled, not to-do)', () => {
+	const old = makeTask({
+		id: 'old',
+		created: '2025-01-01T00:00:00.000Z',
+		lastEditedTime: '2025-01-02T00:00:00.000Z',
+		status: 'Completed'
+	});
+	expect(pruneDeletedTasks([old], new Set(), CUTOFF)).toEqual([old]);
+});
+
+test('pruneDeletedTasks: recently edited or To Do/In Progress tasks are sweep-eligible', () => {
+	const editedRecently = makeTask({
+		id: 'e',
+		created: '2025-01-01T00:00:00.000Z',
+		lastEditedTime: '2026-05-01T00:00:00.000Z',
+		status: 'Completed'
+	});
+	const oldTodo = makeTask({
+		id: 't',
+		created: '2025-01-01T00:00:00.000Z',
+		lastEditedTime: '2025-01-02T00:00:00.000Z',
+		status: 'To Do'
+	});
+	const oldInProgress = makeTask({
+		id: 'p',
+		created: '2025-01-01T00:00:00.000Z',
+		lastEditedTime: '2025-01-02T00:00:00.000Z',
+		status: 'In Progress'
+	});
+	// none of them were returned by the sweep -> all deleted
+	expect(pruneDeletedTasks([editedRecently, oldTodo, oldInProgress], new Set(), CUTOFF)).toEqual(
+		[]
+	);
 });

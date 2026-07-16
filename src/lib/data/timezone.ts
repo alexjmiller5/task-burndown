@@ -48,24 +48,3 @@ export function getCurrentDateStr(tz: string, now: Date = new Date()): string {
 	});
 	return formatter.format(now);
 }
-
-function getTimezoneOffsetMinutes(tz: string, at: Date): number {
-	const fmt = new Intl.DateTimeFormat('en-US', {
-		timeZone: tz,
-		timeZoneName: 'longOffset'
-	});
-	const parts = fmt.formatToParts(at);
-	const name = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT+00:00';
-	const m = name.match(/GMT([+-])(\d{2}):(\d{2})/);
-	if (!m) return 0;
-	const sign = m[1] === '-' ? -1 : 1;
-	return sign * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
-}
-
-export function getStartOfDayUTC(tz: string, now: Date = new Date()): string {
-	const today = getCurrentDateStr(tz, now);
-	const [y, m, d] = today.split('-').map(Number);
-	const utcMidnight = Date.UTC(y, m - 1, d);
-	const offsetMin = getTimezoneOffsetMinutes(tz, new Date(utcMidnight));
-	return new Date(utcMidnight - offsetMin * 60_000).toISOString();
-}

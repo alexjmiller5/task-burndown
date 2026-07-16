@@ -2,16 +2,12 @@
 	import { onMount } from 'svelte';
 	import type { Task, DayCount, GroupBy } from '$lib/types.js';
 	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
-	import { mergeParsedData } from '$lib/data/merge.js';
+	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
+	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
-	import {
-		DEFAULT_TIMEZONE,
-		TIMEZONES,
-		getCurrentDateStr,
-		getStartOfDayUTC
-	} from '$lib/data/timezone.js';
+	import { DEFAULT_TIMEZONE, TIMEZONES, getCurrentDateStr } from '$lib/data/timezone.js';
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
@@ -117,7 +113,12 @@
 		})
 	);
 
-	let categories = $derived([...selectedCategories].sort());
+	// Priorities keep their rank order (High → Low); alphabetical reads as a swap.
+	let categories = $derived(
+		(groupBy as GroupBy) === 'priority'
+			? PRIORITY_ORDER.filter((p) => selectedCategories.has(p))
+			: [...selectedCategories].sort()
+	);
 
 	let totalActive = $derived.by(() => {
 		if (dailyCounts.length === 0) return 0;
@@ -255,19 +256,20 @@
 		}
 	}
 
-	async function refreshToday() {
+	async function refreshEdits() {
 		isRefreshingToday = true;
 		refreshError = null;
 		try {
-			const since = encodeURIComponent(getStartOfDayUTC(timezone));
-			const res = await fetch(`/api/refresh?since=${since}`, { method: 'POST' });
+			// Server syncs from the cache's own last-edited high-water mark, so
+			// this catches everything edited since the last sync — however long ago.
+			const res = await fetch('/api/refresh', { method: 'POST' });
 			if (!res.ok) {
 				refreshError = `${res.status}`;
 				return;
 			}
 			const meta = (await res.json()) as { needsFull: boolean };
 			if (meta.needsFull) {
-				await fullSync(); // empty/stale cache bootstraps itself via the chunk loop
+				await fullSync(); // empty cache bootstraps itself via the chunk loop
 			} else {
 				await loadTasks();
 			}
@@ -275,6 +277,83 @@
 			refreshError = (e as Error).message;
 		} finally {
 			isRefreshingToday = false;
+		}
+	}
+
+	// Edits sync + deletion sweep: pull all edits, fetch the set of page ids that
+	// still exist in Notion (slim id-only queries), drop cached tasks not in it.
+	async function pruneSync() {
+		isFullSyncing = true;
+		refreshError = null;
+		syncProgress = 0;
+		try {
+			const res = await fetch('/api/refresh', { method: 'POST' });
+			if (!res.ok) {
+				refreshError = `${res.status}`;
+				return;
+			}
+			const meta = (await res.json()) as { needsFull: boolean };
+			if (meta.needsFull) {
+				isFullSyncing = false;
+				await fullSync(); // empty cache: nothing to prune, just bootstrap
+				return;
+			}
+
+			const tasksRes = await fetch('/api/tasks');
+			if (!tasksRes.ok) {
+				refreshError = `${tasksRes.status}`;
+				return;
+			}
+			const cacheData = (await tasksRes.json()) as TaskCache;
+
+			// One cutoff for both the server-side sweep and the local prune, so the
+			// two sides of the heuristic can never disagree.
+			const cutoff = getPruneCutoff();
+			const sweptIds = new Set<string>();
+			let cursor: string | null = null;
+			do {
+				const cursorQs: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+				const r = await fetch(`/api/prune?cutoff=${encodeURIComponent(cutoff)}${cursorQs}`, {
+					method: 'POST'
+				});
+				if (!r.ok) {
+					refreshError = `${r.status}`;
+					return;
+				}
+				const { ids, nextCursor } = (await r.json()) as {
+					ids: string[];
+					nextCursor: string | null;
+				};
+				for (const id of ids) sweptIds.add(id);
+				cursor = nextCursor;
+				syncProgress += 1;
+			} while (cursor);
+
+			// Guard: an empty sweep means something went wrong — never wipe the cache.
+			if (sweptIds.size === 0) {
+				refreshError = 'sweep returned no ids';
+				return;
+			}
+
+			const pruned: TaskCache = {
+				...cacheData,
+				tasks: pruneDeletedTasks(cacheData.tasks, sweptIds, cutoff),
+				lastFullRefreshAt: new Date().toISOString()
+			};
+			const put = await fetch('/api/cache', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(pruned)
+			});
+			if (!put.ok) {
+				refreshError = `${put.status}`;
+				return;
+			}
+			applyParsed(pruned);
+		} catch (e) {
+			refreshError = (e as Error).message;
+		} finally {
+			isFullSyncing = false;
 		}
 	}
 
@@ -306,10 +385,10 @@
 		}
 		prefsLoaded = true;
 
-		await loadTasks(); // paint from R2 cache immediately, then sync today
-		// ponytail: page-load sync is a Today sync (since=start of today), never
-		// an auto-full — full syncs are manual via the Full Sync button
-		await refreshToday();
+		await loadTasks(); // paint from R2 cache immediately, then pull edits
+		// ponytail: page-load sync is edits-only (cheap, self-healing); the
+		// deletion sweep and full sync stay manual via their buttons
+		await refreshEdits();
 	});
 </script>
 
@@ -555,12 +634,12 @@
 					</select>
 				</label>
 
-				<!-- Refresh Today button -->
+				<!-- Refresh edits button -->
 				<button
-					onclick={refreshToday}
+					onclick={refreshEdits}
 					disabled={isRefreshingToday || isFullSyncing}
 					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default hover:border-bitcoin/40 hover:bg-bitcoin/5 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-					title="Fetch tasks edited today only (in selected timezone)"
+					title="Fetch all tasks edited since the last sync"
 				>
 					<svg
 						class="w-4 h-4 text-muted {isRefreshingToday ? 'animate-spin' : ''}"
@@ -578,16 +657,16 @@
 						/>
 					</svg>
 					<span class="text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted">
-						{isRefreshingToday ? 'Syncing' : 'Today'}
+						{isRefreshingToday ? 'Syncing' : 'Edits'}
 					</span>
 				</button>
 
-				<!-- Full Sync button -->
+				<!-- Sync button: edits + deletion sweep -->
 				<button
-					onclick={fullSync}
+					onclick={pruneSync}
 					disabled={isFullSyncing || isRefreshingToday}
 					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default hover:border-bitcoin/40 hover:bg-bitcoin/5 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-					title="Re-fetch all pages from Notion (catches deletions)"
+					title="Fetch edits and remove deleted tasks (id sweep, no full re-fetch)"
 				>
 					<svg
 						class="w-4 h-4 text-muted {isFullSyncing ? 'animate-spin' : ''}"
@@ -605,7 +684,7 @@
 						/>
 					</svg>
 					<span class="text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted">
-						{isFullSyncing ? `Sync ${syncProgress}` : 'Full'}
+						{isFullSyncing ? `Sync ${syncProgress}` : 'Sync'}
 					</span>
 				</button>
 

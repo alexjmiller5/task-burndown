@@ -34,8 +34,9 @@ For local deploys you'll also need either `bunx wrangler login` or a `CLOUDFLARE
 - Fetches tasks from a Notion database via the Notion API
 - Parses ~4,300 tasks → 1.1 MB `TaskCache` stored in R2 (`task-burndown-cache/task-cache.json`)
 - Page load: `GET /api/tasks` streams the R2 object to the client (~0 Worker CPU); client applies filters and renders
-- On mount: `POST /api/refresh?since=<today>` incrementally syncs today's changes
-- Full Sync button (or `needsFull` signal): client-driven chunked loop (`POST /api/refresh-chunk`, ~15 requests, ~20–30 s) followed by `PUT /api/cache`
+- On mount: `POST /api/refresh` incrementally syncs everything edited since the last sync (cache high-water mark)
+- Sync button: edits sync + deletion sweep — id-only queries (`POST /api/prune`) collect live page ids for tasks that could plausibly change (created/edited in the last 90 days, or To Do / In Progress); sweep-eligible cached tasks not in the set are dropped and the pruned cache is PUT back
+- Empty cache bootstraps via a client-driven chunked loop (`POST /api/refresh-chunk`, ~15 requests, ~20–30 s) followed by `PUT /api/cache`
 - Stacked area chart showing active task counts over time, grouped by tag, priority, or project
 - Filtering by tags, due date status, legacy cutoff, and incomplete/project toggles
 

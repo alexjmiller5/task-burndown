@@ -41,18 +41,26 @@ afterEach(() => vi.unstubAllGlobals());
 test('empty cache -> needsFull, no Notion call', async () => {
 	const fetchMock = vi.fn();
 	vi.stubGlobal('fetch', fetchMock);
-	const res = await POST(makeEvent(fakeBucket(), '?since=2026-07-08'));
+	const res = await POST(makeEvent(fakeBucket()));
 	expect(await res.json()).toEqual({ needsFull: true });
 	expect(fetchMock.mock.calls.length).toEqual(0);
 });
 
-test('stale cache without since -> needsFull', async () => {
+test('syncs from the cache high-water mark (earlier of max created/edited)', async () => {
 	const cache = { ...EMPTY_CACHE, tasks: [task], lastFullRefreshAt: '2020-01-01T00:00:00.000Z' };
-	const res = await POST(makeEvent(fakeBucket(JSON.stringify(cache))));
-	expect(await res.json()).toEqual({ needsFull: true });
+	const fetchMock = vi.fn().mockResolvedValue(
+		new Response(JSON.stringify({ results: [], has_more: false, next_cursor: null }), {
+			status: 200
+		})
+	);
+	vi.stubGlobal('fetch', fetchMock);
+	await POST(makeEvent(fakeBucket(JSON.stringify(cache))));
+	const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+	// earlier of max(created)=07-01 and max(edited)=07-02
+	expect(body.filter.last_edited_time.on_or_after).toEqual('2026-07-01T00:00:00.000Z');
 });
 
-test('explicit since -> incremental merge, cache written', async () => {
+test('incremental merge, cache written', async () => {
 	const cache = { ...EMPTY_CACHE, tasks: [task], lastFullRefreshAt: '2026-07-08T00:00:00.000Z' };
 	const bucket = fakeBucket(JSON.stringify(cache));
 	const freshPage = {
@@ -81,7 +89,7 @@ test('explicit since -> incremental merge, cache written', async () => {
 			})
 		)
 	);
-	const res = await POST(makeEvent(bucket, '?since=2026-07-08T00:00:00.000Z'));
+	const res = await POST(makeEvent(bucket));
 	const body = (await res.json()) as { needsFull: boolean; freshCount: number };
 	expect(body.needsFull).toEqual(false);
 	expect(body.freshCount).toEqual(1);

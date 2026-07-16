@@ -40,8 +40,7 @@ Requirements: Bun, 1Password CLI (`op`), wrangler (via Bun).
 
 - `secrets.ts` — `getNotionApiKey(env)`: reads `platform.env.NOTION_API_KEY` (Worker secret); falls back to `process.env.NOTION_API_KEY` (injected by `op run` in dev).
 - `cache.ts` — R2 `bucket.get` / `bucket.put`; functions take the `R2Bucket` binding as a parameter. `readCache` returns `EMPTY_CACHE` on miss. No legacy migration.
-- `notion.ts` — Notion API client with full and incremental fetch modes; `fetchPageChunk` for the chunked full-sync loop (3 Notion pages per request ≈ 4–6 ms CPU, 3 subrequests).
-- `refresh-policy.ts` — Pure decision: `shouldFullRefresh` triggers true when cache is empty, when no prior full has happened, or when `lastFullRefreshAt` is ≥ 24 hours ago.
+- `notion.ts` — Notion API client with full and incremental fetch modes; `fetchPageChunk` for the chunked full-sync loop (3 Notion pages per request ≈ 4–6 ms CPU, 3 subrequests); `fetchIdChunk` for the deletion sweep (`filter_properties[]=title` keeps responses ~50 KB, so 10 API pages ≈ 1,000 ids per request).
 
 ### Data Processing (`src/lib/data/`)
 
@@ -61,16 +60,18 @@ Pure TypeScript modules shared between server and client:
 No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 - `GET /api/tasks` — streams the R2 object body straight through (`new Response(obj.body)`, ~0 CPU); client parses + applies filters.
-- `POST /api/refresh?since=<date>` — incremental sync. Reads cache (~2.5 ms parse), fetches changed pages from Notion, merges tasks by id, writes cache back (~2.3 ms stringify). Returns `{ needsFull: true }` when cache is empty or stale with no `since` param (the 24h staleness rule); returns `{ needsFull: false, freshCount, lastFullRefreshAt }` on success.
+- `POST /api/refresh` — incremental sync. Reads cache (~2.5 ms parse), fetches everything edited since the cache's own high-water mark (`getIncrementalSince` = earlier of max(created)/max(lastEditedTime)), merges tasks by id, writes cache back (~2.3 ms stringify). Self-healing: catches edits from days the app was never opened. Returns `{ needsFull: true }` only when the cache is empty; `{ needsFull: false, freshCount, lastFullRefreshAt }` otherwise.
+- `POST /api/prune?cutoff=<iso>&cursor=<cursor>` — one step of the deletion sweep: returns `{ ids, nextCursor }`, up to ~1,000 live page ids per call (id-only queries). Heuristic: only sweeps tasks that could plausibly change — created/edited since the cutoff (90 days) or status To Do / In Progress (~1,250 ids, 2 calls, vs 4,300 in 5). Client loops until `nextCursor` is null, then drops sweep-eligible cached tasks missing from the swept id set and PUTs the pruned cache. Client computes the cutoff once and both sides use it, so the eligibility predicates can't disagree.
 - `POST /api/refresh-chunk?cursor=<cursor>` — one step of the chunked Full Sync loop. Fetches up to 3 Notion API pages (~3 subrequests, ~4–6 ms CPU), returns `{ tasks, tagColors, …, nextCursor }`. Client accumulates chunks until `nextCursor` is null.
 - `PUT /api/cache` — client streams the assembled `TaskCache` JSON into R2 after completing the chunk loop. Cheap sanity check only (non-empty, starts with `{`); CF Access restricts callers.
 
 ### Data Flow
 
 1. **Page load**: client `onMount` → `GET /api/tasks` → streams 1.1 MB JSON → client parses, applies `applyBaseFilters` + view filters → renders chart.
-2. **Today sync** (on mount, background): `POST /api/refresh?since=<start of today in selected tz>`. If `needsFull: true` → falls into Full Sync flow.
-3. **Full Sync** (button or on `needsFull`): client loops `POST /api/refresh-chunk` (~15 sequential requests, ~20–30 s, "Sync N" progress on button) until `nextCursor` is null, assembles `TaskCache`, then `PUT /api/cache`. Client calls `applyParsed` directly with the assembled `TaskCache` (no re-fetch after PUT).
-4. Client updates chart reactively via Svelte 5 `$derived` pipeline.
+2. **Edits sync** (on mount and via the "Edits" button): `POST /api/refresh` — server syncs from the cache high-water mark, so this catches all edits since the last sync. If `needsFull: true` (empty cache) → falls into Full Sync bootstrap.
+3. **Sync button** (`pruneSync`): edits sync + deletion sweep — `POST /api/refresh`, `GET /api/tasks`, loop `POST /api/prune` (~5 calls) to collect live ids, drop cached tasks not in the set, `PUT /api/cache`. Guard: aborts rather than PUT if the sweep returns zero ids.
+4. **Full Sync** (bootstrap only, when `needsFull`): client loops `POST /api/refresh-chunk` (~15 sequential requests, ~20–30 s, "Sync N" progress) until `nextCursor` is null, assembles `TaskCache`, then `PUT /api/cache`.
+5. Client updates chart reactively via Svelte 5 `$derived` pipeline.
 
 **Why chunked full sync?** Workers free tier: 10 ms CPU/request + 50 subrequests/request. Parsing 16.9 MB of raw pages costs ~78 ms CPU. Storing parsed tasks (1.1 MB) and chunking the full refresh through the browser stays within both limits.
 
@@ -79,7 +80,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 - `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import)
 - `RangeSlider.svelte` — Dual-handle date range slider
 
-UI controls (range presets, group-by selector, timezone dropdown, Full Sync button, toggle switches) are inlined in `src/routes/+page.svelte` rather than extracted into components.
+UI controls (range presets, group-by selector, timezone dropdown, Edits/Sync buttons, toggle switches) are inlined in `src/routes/+page.svelte` rather than extracted into components. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical.
 
 ## Secrets
 
@@ -106,15 +107,15 @@ UI controls (range presets, group-by selector, timezone dropdown, Full Sync butt
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 87 tests as of the CF migration.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 78 tests as of the prune-sync work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 
 ## Key Concepts
 
-**Incremental fetching**: Instead of fetching all ~4,300 tasks, the refresh uses the earlier of `max(created)` and `max(lastEditedTime)` across cached tasks as a threshold, then queries Notion with `last_edited_time >= threshold`. Fresh tasks are merged by ID into the cache.
+**Incremental fetching**: Instead of fetching all ~4,300 tasks, the refresh uses the earlier of `max(created)` and `max(lastEditedTime)` across cached tasks as a threshold, then queries Notion with `last_edited_time >= threshold`. Fresh tasks are merged by ID into the cache. This threshold is only sound if the cache actually contains every edit up to its own maximum — a full sync establishes that invariant and each incremental preserves it. (A historical bug synced from `start of today` instead, silently skipping edits from unopened days; a poisoned cache like that can only be repaired by a full sync.)
 
-**Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The only way to detect a deletion is a full refresh that replaces the cache wholesale. The chunked Full Sync loop exists partly for this reason.
+**Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The `/api/prune` id sweep handles this cheaply: fetch live page ids (slim `filter_properties[]=title` queries) for tasks that could plausibly change, drop sweep-eligible cached tasks not in the set. Accepted tradeoff: deleting an old, settled, non-open task won't be noticed until a full sync — such tasks are assumed immutable. The Sync button runs edits sync + sweep; the full re-parse loop is only needed to bootstrap an empty cache.
 
 **Timezone awareness**: The user picks a timezone from a curated list (default `America/New_York`). It _is_ persisted across reloads (localStorage via `preferences.ts`, along with groupBy, toggles, and preset — presets re-anchor to today on restore). The selected timezone affects: `created_time` → date bucketing, range presets ("today" anchor), the slider's right edge, and `totalActive`. It does _not_ affect Notion `dueDate`/`completed` (already date-only strings) or history ledger dates (date-only strings written in the user's local TZ at edit time).
 
