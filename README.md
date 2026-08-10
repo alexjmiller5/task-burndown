@@ -62,11 +62,11 @@ Then: Zero Trust → Access → Applications → the auto-created app → set **
 Finally, add a second Access application ("public PWA assets") with a **Bypass / Everyone** policy covering exactly these paths — iOS fetches the homescreen icon and browsers fetch the manifest **without cookies**, so without this the icon falls back to a letter monogram:
 
 ```
-task-burndown.amiller06880.workers.dev/apple-touch-icon.png
-task-burndown.amiller06880.workers.dev/icon-192.png
-task-burndown.amiller06880.workers.dev/icon-512.png
-task-burndown.amiller06880.workers.dev/favicon.svg
-task-burndown.amiller06880.workers.dev/manifest.webmanifest
+task-burndown.nqipomyrjb.workers.dev/apple-touch-icon.png
+task-burndown.nqipomyrjb.workers.dev/icon-192.png
+task-burndown.nqipomyrjb.workers.dev/icon-512.png
+task-burndown.nqipomyrjb.workers.dev/favicon.svg
+task-burndown.nqipomyrjb.workers.dev/manifest.webmanifest
 ```
 
 (These are three chart PNGs and an app name — nothing sensitive. Everything else stays behind Access.)
