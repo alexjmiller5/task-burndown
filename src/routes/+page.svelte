@@ -4,6 +4,8 @@
 	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
+	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
+	import { calculateDailyMetrics, calculateFlows, pickFlowBucket } from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -11,6 +13,7 @@
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
+	import MetricsChart from '../components/MetricsChart.svelte';
 	import RangeSlider from '../components/RangeSlider.svelte';
 
 	const DEFAULT_TAGS = [
@@ -27,8 +30,19 @@
 	const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
 		{ value: 'tag', label: 'Tag' },
 		{ value: 'priority', label: 'Priority' },
-		{ value: 'project', label: 'Project' }
+		{ value: 'project', label: 'Project' },
+		{ value: 'age', label: 'Age' }
 	];
+
+	// Sequential heat ramp, young → old (warm → cold as tasks go stale);
+	// adjacent-pair CVD/normal separation validated against the dark surface.
+	const AGE_BAND_COLORS: Record<string, string> = {
+		'<1w': '#FDE047',
+		'1w-1m': '#F97316',
+		'1-3m': '#E11D48',
+		'3-6m': '#A21CAF',
+		'6m+': '#6366F1'
+	};
 
 	const SLIDER_MIN = '2025-01-10';
 
@@ -81,6 +95,8 @@
 				return allPriorities;
 			case 'project':
 				return allProjects;
+			case 'age':
+				return [...AGE_BAND_ORDER];
 		}
 	});
 
@@ -94,6 +110,8 @@
 				return new Set(allPriorities);
 			case 'project':
 				return new Set(allProjects);
+			case 'age':
+				return new Set(AGE_BAND_ORDER);
 		}
 	});
 
@@ -109,16 +127,23 @@
 			limitDate: SLIDER_MAX,
 			groupBy,
 			allCategories,
-			selectedCategories
+			selectedCategories,
+			tz: timezone
 		})
 	);
 
-	// Priorities keep their rank order (High → Low); alphabetical reads as a swap.
-	let categories = $derived(
-		(groupBy as GroupBy) === 'priority'
-			? PRIORITY_ORDER.filter((p) => selectedCategories.has(p))
-			: [...selectedCategories].sort()
-	);
+	// Priorities keep their rank order (High → Low) and age bands their ramp
+	// order (oldest at the bottom of the stack); alphabetical reads as a swap.
+	let categories = $derived.by(() => {
+		switch (groupBy) {
+			case 'priority':
+				return PRIORITY_ORDER.filter((p) => selectedCategories.has(p));
+			case 'age':
+				return AGE_BAND_ORDER.filter((b) => selectedCategories.has(b));
+			default:
+				return [...selectedCategories].sort();
+		}
+	});
 
 	let totalActive = $derived.by(() => {
 		if (dailyCounts.length === 0) return 0;
@@ -146,8 +171,14 @@
 				return PRIORITY_COLORS;
 			case 'project':
 				return {};
+			case 'age':
+				return AGE_BAND_COLORS;
 		}
 	});
+
+	let dailyMetrics = $derived(calculateDailyMetrics(filteredTasks, timezone, minDate, SLIDER_MAX));
+	let flowBucket = $derived(pickFlowBucket(dateStart, dateEnd));
+	let flows = $derived(calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd));
 
 	function selectPreset(label: string) {
 		activePreset = label;
@@ -779,4 +810,20 @@
 			</div>
 		{/if}
 	</div>
+
+	<!-- Metrics panel — age / push-back / flow companion charts. Desktop only:
+	     the mobile layout is locked to one viewport for the main chart. -->
+	{#if baseTasks.length > 0}
+		<div
+			class="hidden sm:block order-4 rounded-card border border-border-default bg-surface p-6 h-[340px]"
+			style="box-shadow: 0 0 60px -20px var(--color-bitcoin-glow-soft);"
+		>
+			<MetricsChart
+				metrics={dailyMetrics}
+				{flows}
+				{flowBucket}
+				dateRange={{ start: dateStart, end: dateEnd }}
+			/>
+		</div>
+	{/if}
 </div>

@@ -1,5 +1,6 @@
 import type { Task, TaskEvent } from '$lib/types.js';
-import { getCurrentDateStr, toLocalDateStr } from './timezone.ts';
+import { AGE_BAND_LIMITS } from './calculator.ts';
+import { addDays, getCurrentDateStr, toLocalDateStr } from './timezone.ts';
 
 function getEffectiveStartDate(task: Task, tz: string): string {
 	if (task.dueDate) {
@@ -32,6 +33,15 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 
 		for (const h of task.history) {
 			addEvent(h.date, 'stateChange', task);
+		}
+
+		// Age-band crossings: the task's group changes on these days even without
+		// an edit. Harmless for other group-bys (unchanged keys are a no-op).
+		const createdDate = toLocalDateStr(task.created, tz);
+		for (const limit of AGE_BAND_LIMITS) {
+			const crossing = addDays(createdDate, limit);
+			if (completedDate && crossing > completedDate) break;
+			addEvent(crossing, 'stateChange', task);
 		}
 	}
 

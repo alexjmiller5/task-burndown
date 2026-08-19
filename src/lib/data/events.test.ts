@@ -113,3 +113,11 @@ test('getMinDate — uses created (in tz) when no due date', () => {
 	];
 	expect(getMinDate(tasks, 'America/New_York')).toEqual('2026-05-03');
 });
+
+test('buildEventsMap — age-band crossings appear as stateChange events', () => {
+	const task = makeTask({ created: '2026-01-01T15:00:00.000Z' }); // 2026-01-01 in UTC
+	const events = buildEventsMap([task], 'UTC');
+	for (const date of ['2026-01-08', '2026-01-31', '2026-04-01', '2026-06-30']) {
+		expect(events.get(date)?.stateChange.map((t) => t.id)).toContain('task-1');
+	}
+});

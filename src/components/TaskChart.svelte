@@ -46,6 +46,12 @@
 
 	function getTagColor(tag: string, index: number) {
 		const notionColor = tagColors[tag];
+		if (notionColor?.startsWith('#')) {
+			const r = parseInt(notionColor.slice(1, 3), 16);
+			const g = parseInt(notionColor.slice(3, 5), 16);
+			const b = parseInt(notionColor.slice(5, 7), 16);
+			return { bg: `rgba(${r}, ${g}, ${b}, 0.55)`, border: notionColor };
+		}
 		if (notionColor && NOTION_COLOR_MAP[notionColor]) {
 			return NOTION_COLOR_MAP[notionColor];
 		}

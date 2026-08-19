@@ -1,5 +1,19 @@
 import type { Task, TaskEvent, DayCount, GroupBy } from '$lib/types.js';
-import { addDays } from './timezone.ts';
+import { addDays, DEFAULT_TIMEZONE, diffDays, toLocalDateStr } from './timezone.ts';
+
+// Band upper bounds in days; a task crosses into the next band at each limit.
+export const AGE_BAND_LIMITS = [7, 30, 90, 180] as const;
+const AGE_BAND_NAMES = ['<1w', '1w-1m', '1-3m', '3-6m', '6m+'] as const;
+// Display order: oldest band at the bottom of the stack.
+export const AGE_BAND_ORDER = [...AGE_BAND_NAMES].reverse();
+
+function getAgeBand(task: Task, dateStr: string, tz: string): string {
+	const age = diffDays(toLocalDateStr(task.created, tz), dateStr);
+	for (let i = 0; i < AGE_BAND_LIMITS.length; i++) {
+		if (age < AGE_BAND_LIMITS[i]) return AGE_BAND_NAMES[i];
+	}
+	return AGE_BAND_NAMES[AGE_BAND_NAMES.length - 1];
+}
 
 function getTaskTagsForDate(task: Task, dateStr: string): string[] {
 	if (task.history.length === 0) return task.tags;
@@ -11,7 +25,7 @@ function getTaskTagsForDate(task: Task, dateStr: string): string[] {
 	return activeTags;
 }
 
-function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string): string[] {
+function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: string): string[] {
 	switch (groupBy) {
 		case 'tag': {
 			const tags = getTaskTagsForDate(task, dateStr);
@@ -21,6 +35,8 @@ function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string): string[] {
 			return [task.priority];
 		case 'project':
 			return [task.projectName];
+		case 'age':
+			return [getAgeBand(task, dateStr, tz)];
 		default:
 			throw new Error(`Unhandled groupBy: ${groupBy}`);
 	}
@@ -38,10 +54,19 @@ export interface CalculateParams {
 	groupBy: GroupBy;
 	allCategories: string[];
 	selectedCategories: Set<string>;
+	tz?: string;
 }
 
 export function calculateDailyCounts(params: CalculateParams): DayCount[] {
-	const { events, minDate, limitDate, groupBy, allCategories, selectedCategories } = params;
+	const {
+		events,
+		minDate,
+		limitDate,
+		groupBy,
+		allCategories,
+		selectedCategories,
+		tz = DEFAULT_TIMEZONE
+	} = params;
 
 	if (minDate >= limitDate) return [];
 
@@ -67,7 +92,7 @@ export function calculateDailyCounts(params: CalculateParams): DayCount[] {
 	}
 
 	function handleTaskAdd(task: Task, dateStr: string) {
-		const groupKeys = getGroupKeys(task, groupBy, dateStr);
+		const groupKeys = getGroupKeys(task, groupBy, dateStr, tz);
 		const passes = groupKeys.some((k) => selectedCategories.has(k));
 		activeStates.set(task.id, { groupKeys, passes });
 		if (passes) addContribution(groupKeys);
@@ -83,7 +108,7 @@ export function calculateDailyCounts(params: CalculateParams): DayCount[] {
 		const oldState = activeStates.get(task.id);
 		if (!oldState) return;
 
-		const groupKeys = getGroupKeys(task, groupBy, dateStr);
+		const groupKeys = getGroupKeys(task, groupBy, dateStr, tz);
 		const passes = groupKeys.some((k) => selectedCategories.has(k));
 
 		if (

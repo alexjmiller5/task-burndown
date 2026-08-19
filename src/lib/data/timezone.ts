@@ -18,15 +18,32 @@ export const DEFAULT_TIMEZONE = 'America/New_York';
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Intl.DateTimeFormat construction is expensive; cache one formatter per tz.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+function getFormatter(tz: string): Intl.DateTimeFormat {
+	let f = formatters.get(tz);
+	if (!f) {
+		f = new Intl.DateTimeFormat('en-CA', {
+			timeZone: tz,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit'
+		});
+		formatters.set(tz, f);
+	}
+	return f;
+}
+
 export function toLocalDateStr(value: string, tz: string): string {
 	if (DATE_ONLY_RE.test(value)) return value;
-	const formatter = new Intl.DateTimeFormat('en-CA', {
-		timeZone: tz,
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit'
-	});
-	return formatter.format(new Date(value));
+	return getFormatter(tz).format(new Date(value));
+}
+
+/** Calendar days from dateStr a to b (UTC arithmetic, DST-safe). */
+export function diffDays(a: string, b: string): number {
+	const [ay, am, ad] = a.split('-').map(Number);
+	const [by, bm, bd] = b.split('-').map(Number);
+	return (Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86_400_000;
 }
 
 export function addDays(dateStr: string, days: number): string {

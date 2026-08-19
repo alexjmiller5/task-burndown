@@ -29,7 +29,7 @@ export interface HistoryEntry {
 }
 
 export type DueDateCategory = 'Future' | 'Overdue' | 'Undated';
-export type GroupBy = 'tag' | 'priority' | 'project';
+export type GroupBy = 'tag' | 'priority' | 'project' | 'age';
 
 export interface DayCount {
 	date: string;

@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import {
 	addDays,
 	DEFAULT_TIMEZONE,
+	diffDays,
 	getCurrentDateStr,
 	TIMEZONES,
 	toLocalDateStr
@@ -108,4 +109,12 @@ test('TIMEZONES — curated list contains expected entries', () => {
 
 test('DEFAULT_TIMEZONE is America/New_York', () => {
 	expect(DEFAULT_TIMEZONE).toEqual('America/New_York');
+});
+
+test('diffDays counts calendar days between date strings', () => {
+	expect(diffDays('2026-01-01', '2026-01-08')).toBe(7);
+	expect(diffDays('2026-01-08', '2026-01-01')).toBe(-7);
+	expect(diffDays('2026-03-01', '2026-03-01')).toBe(0);
+	// across a DST transition (US spring forward 2026-03-08)
+	expect(diffDays('2026-03-07', '2026-03-09')).toBe(2);
 });

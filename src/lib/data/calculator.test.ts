@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { calculateDailyCounts } from './calculator.ts';
+import { AGE_BAND_ORDER, calculateDailyCounts } from './calculator.ts';
 import { buildEventsMap } from './events.ts';
 import type { Task } from '$lib/types.js';
 
@@ -146,4 +146,41 @@ test('calculateDailyCounts — state change adds task to new tag bucket', () => 
 	// 5/3: state changed to Chore
 	expect(result[2].Work).toEqual(0);
 	expect(result[2].Chore).toEqual(1);
+});
+
+test('calculateDailyCounts — age group-by moves a task across band boundaries', () => {
+	const tasks = [makeTask({ created: '2026-01-01T15:00:00.000Z' })];
+	const events = buildEventsMap(tasks, 'UTC');
+	const result = calculateDailyCounts({
+		events,
+		minDate: '2026-01-01',
+		limitDate: '2026-01-09',
+		groupBy: 'age',
+		allCategories: [...AGE_BAND_ORDER],
+		selectedCategories: new Set(AGE_BAND_ORDER),
+		tz: 'UTC'
+	});
+	const jan7 = result.find((d) => d.date === '2026-01-07')!;
+	const jan8 = result.find((d) => d.date === '2026-01-08')!;
+	expect(jan7['<1w']).toEqual(1);
+	expect(jan7['1w-1m']).toEqual(0);
+	expect(jan8['<1w']).toEqual(0);
+	expect(jan8['1w-1m']).toEqual(1);
+});
+
+test('calculateDailyCounts — age group-by buckets an old task into 6m+', () => {
+	const tasks = [makeTask({ created: '2025-01-01T15:00:00.000Z' })];
+	const events = buildEventsMap(tasks, 'UTC');
+	const result = calculateDailyCounts({
+		events,
+		minDate: '2025-01-01',
+		limitDate: '2026-01-02',
+		groupBy: 'age',
+		allCategories: [...AGE_BAND_ORDER],
+		selectedCategories: new Set(AGE_BAND_ORDER),
+		tz: 'UTC'
+	});
+	const jan1 = result.find((d) => d.date === '2026-01-01')!;
+	expect(jan1['6m+']).toEqual(1);
+	expect(jan1['<1w']).toEqual(0);
 });
