@@ -1,12 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { GroupBy, Task } from '$lib/types.js';
-	import {
-		calculateFlows,
-		pickFlowBucket,
-		type DayMetrics,
-		type FlowBucket
-	} from '$lib/data/metrics.js';
+	import { calculateFlows, type DayMetrics, type FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
 
 	interface Props {
@@ -37,10 +32,7 @@
 		{ value: 'week', label: 'Week' },
 		{ value: 'month', label: 'Month' }
 	];
-	let bucketOverride: FlowBucket | null = $state(null);
-	let bucket: FlowBucket = $derived(
-		bucketOverride ?? pickFlowBucket(dateRange.start, dateRange.end)
-	);
+	let bucket: FlowBucket = $state('day');
 	let flows = $derived(calculateFlows(tasks, tz, bucket, dateRange.start, dateRange.end, groupBy));
 
 	let canvas: HTMLCanvasElement;
@@ -280,7 +272,7 @@
 			<div class="flex items-center gap-1 bg-black/30 rounded-control p-1">
 				{#each BUCKETS as b}
 					<button
-						onclick={() => (bucketOverride = b.value)}
+						onclick={() => (bucket = b.value)}
 						class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {bucket ===
 						b.value
 							? ''

@@ -54,7 +54,7 @@ Pure TypeScript modules shared between server and client:
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
 - `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by; `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
-- `metrics.ts` — `calculateDailyMetrics` (per-day avg open-task age, p90 open-task age, rolling 14-day median age-at-completion) and `calculateFlows`/`pickFlowBucket` (created/completed counts per day/week/month bucket, broken down by the active group-by's keys as of each event's day; `pickFlowBucket` auto-picks from the visible range).
+- `metrics.ts` — `calculateDailyMetrics` (per-day avg open-task age, p90 open-task age, rolling 14-day median age-at-completion) and `calculateFlows` (created/completed counts per day/week/month bucket, broken down by the active group-by's keys as of each event's day).
 
 ### Server Routes (`src/routes/`)
 
@@ -79,7 +79,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 ### Components (`src/components/`)
 
 - `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp)
-- `MetricsChart.svelte` — tabbed companion panel (Age / Flow) below the main chart, desktop-only; initial tab can be deep-linked via URL hash (`#flow`). Flow stacks by the main chart's active group-by with a Day/Week/Month bucket override (defaults to the auto-pick); legend entries toggle both directions of a category
+- `MetricsChart.svelte` — tabbed companion panel (Age / Flow) below the main chart, desktop-only; initial tab can be deep-linked via URL hash (`#flow`). Flow stacks by the main chart's active group-by with a Day/Week/Month bucket switch (default Day — a bar per date, like the main chart); legend entries toggle both directions of a category
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by both charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 

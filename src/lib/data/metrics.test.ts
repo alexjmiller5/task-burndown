@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { calculateDailyMetrics, calculateFlows, pickFlowBucket } from './metrics.ts';
+import { calculateDailyMetrics, calculateFlows } from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -77,12 +77,6 @@ test('completedMedianAge covers a rolling 14-day window and clamps negative ages
 	expect(by['2026-05-11']).toEqual(5); // ages 10 and 0 → median 5
 	expect(by['2026-05-24']).toEqual(5); // still inside the 14-day window
 	expect(by['2026-05-25']).toBeNull(); // window has moved past 05-11
-});
-
-test('pickFlowBucket scales with the visible range', () => {
-	expect(pickFlowBucket('2026-08-01', '2026-08-31')).toEqual('day');
-	expect(pickFlowBucket('2026-05-01', '2026-08-01')).toEqual('week');
-	expect(pickFlowBucket('2025-08-01', '2026-08-18')).toEqual('month');
 });
 
 test('calculateFlows buckets counts by day and group category, zero-filled', () => {

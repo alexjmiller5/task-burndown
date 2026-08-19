@@ -128,13 +128,6 @@ export function calculateDailyMetrics(
 
 export type FlowBucket = 'day' | 'week' | 'month';
 
-export function pickFlowBucket(start: string, end: string): FlowBucket {
-	const days = diffDays(start, end);
-	if (days <= 45) return 'day';
-	if (days <= 270) return 'week';
-	return 'month';
-}
-
 export interface FlowRow {
 	label: string;
 	created: Record<string, number>;
