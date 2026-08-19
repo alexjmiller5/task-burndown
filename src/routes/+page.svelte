@@ -5,7 +5,7 @@
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
-	import { calculateDailyMetrics, calculateFlows, pickFlowBucket } from '$lib/data/metrics.js';
+	import { calculateDailyMetrics } from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -177,8 +177,6 @@
 	});
 
 	let dailyMetrics = $derived(calculateDailyMetrics(filteredTasks, timezone, minDate, SLIDER_MAX));
-	let flowBucket = $derived(pickFlowBucket(dateStart, dateEnd));
-	let flows = $derived(calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd));
 
 	function selectPreset(label: string) {
 		activePreset = label;
@@ -820,8 +818,11 @@
 		>
 			<MetricsChart
 				metrics={dailyMetrics}
-				{flows}
-				{flowBucket}
+				tasks={filteredTasks}
+				tz={timezone}
+				{groupBy}
+				{categories}
+				colorMap={chartColors}
 				dateRange={{ start: dateStart, end: dateEnd }}
 			/>
 		</div>

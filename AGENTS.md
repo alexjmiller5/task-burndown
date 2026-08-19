@@ -48,13 +48,13 @@ Pure TypeScript modules shared between server and client:
 
 - `parser.ts` — `parseTasks(pages): ParsedData` parses Notion pages into **unfiltered** Task objects + metadata. No filtering; callers call `applyBaseFilters` themselves.
 - `merge.ts` — `mergeParsedData` (id-keyed merge of incremental result into cached tasks); `getIncrementalSince` (threshold = earlier of `max(created)` and `max(lastEditedTime)` across cached tasks).
-- `history.ts` — Parses "Tag & Date History" ledger field (format: `[YYYY-MM-DD HH:MM] --- Tags: [...], Due Date: ...`); sorts entries by timestamp (real ledgers are out-of-order with mixed-timezone stamps), treats the literal `None`/`undefined` as no due date, and collapses to the last state per day. `getPushbackDates` derives the days a task's due date was pushed later (see Key Concepts).
+- `history.ts` — Parses "Tag & Date History" ledger field (format: `[YYYY-MM-DD HH:MM] --- Tags: [...], Due Date: ...`); sorts entries by timestamp (real ledgers are out-of-order with mixed-timezone stamps), treats the literal `None`/`undefined` as no due date, and collapses to the last state per day.
 - `filters.ts` — `applyBaseFilters` (cancelled/useless, called client-side after loading cache) and `applyViewFilters` (legacy cutoff, incomplete, project tasks — also client-side toggles).
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
 - `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by; `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
-- `metrics.ts` — `calculateDailyMetrics` (per-day median open-task age, rolling 14-day median age-at-completion, rolling 7-day push-back count) and `calculateFlows`/`pickFlowBucket` (created/completed counts per day/week/month bucket, auto-picked from the visible range).
+- `metrics.ts` — `calculateDailyMetrics` (per-day avg open-task age, p90 open-task age, rolling 14-day median age-at-completion) and `calculateFlows`/`pickFlowBucket` (created/completed counts per day/week/month bucket, broken down by the active group-by's keys as of each event's day; `pickFlowBucket` auto-picks from the visible range).
 
 ### Server Routes (`src/routes/`)
 
@@ -79,7 +79,8 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 ### Components (`src/components/`)
 
 - `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp)
-- `MetricsChart.svelte` — tabbed companion panel (Age / Push-backs / Flow) below the main chart, desktop-only; initial tab can be deep-linked via URL hash (`#pushbacks`, `#flow`)
+- `MetricsChart.svelte` — tabbed companion panel (Age / Flow) below the main chart, desktop-only; initial tab can be deep-linked via URL hash (`#flow`). Flow stacks by the main chart's active group-by with a Day/Week/Month bucket override (defaults to the auto-pick); legend entries toggle both directions of a category
+- `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by both charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
 UI controls (range presets, group-by selector, timezone dropdown, Edits/Sync buttons, toggle switches) are inlined in `src/routes/+page.svelte` rather than extracted into components. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical.
@@ -109,7 +110,7 @@ UI controls (range presets, group-by selector, timezone dropdown, Edits/Sync but
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 105 tests as of the metrics-panel work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 100 tests as of the metrics-panel work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 
@@ -125,9 +126,7 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 
 **History ledger**: Tasks have a "Tag & Date History" rich text field that records tag/due date changes over time. This enables historical accuracy — the chart shows what tags a task had on any given past date.
 
-**Push-back semantics**: a push back is a day-over-day due-date move to a LATER date, computed on the day-collapsed ledger — several same-day moves net to at most one push back, and a same-day wobble that nets earlier counts as none. Setting a due date where there was none, clearing one, and pull-ins are not push backs; ledger entries dated after the completion date (backdated bookkeeping) are ignored. The ledger is occasionally lossy (a due date can change with no entry) — accepted undercount.
-
-**Age metrics**: the metrics panel's open pool runs from created day to completed day (created-anchored, unlike the chart's due-date effective start). Tasks with a terminal status but no completed date (pre-2025 legacy) are excluded from the pool rather than polluting it forever; completed-before-created ages clamp to 0.
+**Age metrics**: the metrics panel's open pool runs from created day to completed day (created-anchored, unlike the chart's due-date effective start). Avg age (not median — a burst of new tasks makes the median saw-tooth) plus p90 age (the oldest-decile line, robust to new-task bursts). Tasks with a terminal status but no completed date (pre-2025 legacy) are excluded from the pool rather than polluting it forever; completed-before-created ages clamp to 0.
 
 **View filters**: Base filters (cancelled, useless) apply client-side via `applyBaseFilters` after loading the cache. Toggle filters (legacy cutoff 2025-01-10, incomplete tasks, project tasks) apply client-side for instant response.
 

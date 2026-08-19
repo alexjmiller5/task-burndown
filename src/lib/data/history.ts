@@ -38,22 +38,3 @@ export function parseHistoryLedger(text: string): HistoryEntry[] {
 		.map(([date, state]) => ({ date, ...state }))
 		.sort((a, b) => a.date.localeCompare(b.date));
 }
-
-/**
- * Dates on which the task's due date was pushed back: day-over-day transitions
- * where both states have a due date and the new one is later. Setting, clearing,
- * and pulling in a due date are not push backs; entries recorded after the
- * completion date (backdated bookkeeping) are ignored.
- */
-export function getPushbackDates(entries: HistoryEntry[], completedDate: string | null): string[] {
-	const dates: string[] = [];
-	for (let i = 1; i < entries.length; i++) {
-		const prev = entries[i - 1];
-		const cur = entries[i];
-		if (completedDate && cur.date > completedDate) break;
-		if (prev.dueDate && cur.dueDate && cur.dueDate > prev.dueDate) {
-			dates.push(cur.date);
-		}
-	}
-	return dates;
-}

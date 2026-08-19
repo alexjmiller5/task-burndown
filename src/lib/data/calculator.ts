@@ -25,7 +25,8 @@ function getTaskTagsForDate(task: Task, dateStr: string): string[] {
 	return activeTags;
 }
 
-function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: string): string[] {
+/** Group keys for a task as of a given day — shared by the chart and the flow view. */
+export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: string): string[] {
 	switch (groupBy) {
 		case 'tag': {
 			const tags = getTaskTagsForDate(task, dateStr);
