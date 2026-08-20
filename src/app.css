@@ -3,6 +3,10 @@
 
 /* Components ship dark: classes; app is dark-only via class="dark" on <html> */
 @custom-variant dark (&:is(.dark *));
+/* The ui components' data-open:/data-closed: animation variants key off
+   bits-ui's data-state attribute, not a bare data-open attribute */
+@custom-variant data-open (&[data-state='open']);
+@custom-variant data-closed (&[data-state='closed']);
 
 @theme {
 	--font-heading: 'Space Grotesk', sans-serif;

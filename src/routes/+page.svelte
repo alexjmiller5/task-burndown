@@ -91,7 +91,7 @@
 
 	// Shared styling: shadcn triggers/buttons dressed in the app's control language
 	const TRIGGER_CLASS =
-		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase hover:border-border-strong dark:bg-transparent dark:hover:bg-secondary/40';
+		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase transition-all duration-150 hover:border-border-strong active:translate-y-px dark:bg-transparent dark:hover:bg-secondary/40';
 	const CONTENT_CLASS = 'font-[var(--font-mono)] text-xs tracking-wider uppercase';
 	const ACTION_BTN_CLASS =
 		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase hover:border-bitcoin/40 hover:text-muted dark:bg-transparent dark:border-border-default dark:hover:bg-bitcoin/5';
