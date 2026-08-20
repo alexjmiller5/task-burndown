@@ -3,6 +3,7 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
+	import dayjs from 'dayjs';
 
 	interface Props {
 		dailyCounts: DayCount[];

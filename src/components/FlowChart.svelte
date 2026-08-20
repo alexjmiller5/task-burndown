@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { FlowBucket, FlowRow } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
+	import dayjs from 'dayjs';
 
 	interface Props {
 		flows: FlowRow[];
@@ -22,8 +23,18 @@
 		isMobile = 'matches' in e ? e.matches : false;
 	}
 
+	function formatLabel(label: string): string {
+		if (bucket === 'month') return dayjs(`${label}-01`).format('MMM YYYY');
+		return dayjs(label).format('MMM D');
+	}
+
+	function formatTitle(label: string): string {
+		if (bucket === 'month') return formatLabel(label);
+		if (bucket === 'week') return `Week of ${dayjs(label).format('MMM D')}`;
+		return dayjs(label).format('MMM D, YYYY');
+	}
+
 	function buildConfig() {
-		const unitLabel = { day: 'day', week: 'week of', month: 'month' }[bucket];
 		// One dataset per category and direction; created stacks up, completed down.
 		const datasets = categories.flatMap((cat, i) => {
 			const color = getSeriesColor(cat, colorMap, i);
@@ -90,7 +101,7 @@
 						cornerRadius: 8,
 						filter: (item: any) => item.raw !== 0,
 						callbacks: {
-							title: (items: any[]) => `${unitLabel} ${items[0]?.label ?? ''}`,
+							title: (items: any[]) => (items[0] ? formatTitle(items[0].label) : ''),
 							label: (item: any) =>
 								`${item.raw > 0 ? 'Created' : 'Completed'} · ${item.dataset.label}: ${Math.abs(item.raw)}`,
 							footer: (items: any[]) => {
@@ -110,7 +121,10 @@
 							font: { family: 'JetBrains Mono', size: 10 },
 							maxRotation: 0,
 							autoSkip: true,
-							maxTicksLimit: isMobile ? 6 : 12
+							maxTicksLimit: isMobile ? 6 : 12,
+							callback: function (this: any, value: number) {
+								return formatLabel(this.getLabelForValue(value));
+							}
 						},
 						border: { color: 'rgba(30, 41, 59, 0.6)' }
 					},
@@ -154,6 +168,16 @@
 		await import('chartjs-adapter-dayjs-4');
 		ChartJS = mod.Chart;
 		ChartJS.register(...mod.registerables);
+
+		// Register the cursor-following tooltip positioner (also used by TaskChart,
+		// but this chart can mount first when the app loads in flow mode)
+		(mod.Tooltip as any).positioners.cursor = function (
+			_elements: any[],
+			eventPosition: { x: number; y: number }
+		) {
+			return { x: eventPosition.x, y: eventPosition.y };
+		};
+
 		rebuildChart();
 	});
 
