@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { avgDueToCompletion, calculateFlows, rollingAvgTotals, sampleDailyCounts } from './metrics.ts';
+import { avgDueToCompletion, calculateFlows, cancelRate, rollingAvgTotals, sampleDailyCounts } from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -139,4 +139,16 @@ test('avgDueToCompletion averages signed days from due date to completion', () =
 	];
 	expect(avgDueToCompletion(tasks, 'UTC')).toEqual(0.5);
 	expect(avgDueToCompletion([makeTask()], 'UTC')).toBeNull();
+});
+
+test('cancelRate is the percentage of resolved tasks that were canceled', () => {
+	const tasks = [
+		makeTask({ id: 'c1', status: 'Canceled' }),
+		makeTask({ id: 'd1', status: 'Completed' }),
+		makeTask({ id: 'd2', status: 'Completed' }),
+		makeTask({ id: 'd3', status: 'Completed' }),
+		makeTask({ id: 'open', status: 'To Do' }) // unresolved: not in the denominator
+	];
+	expect(cancelRate(tasks)).toEqual(25);
+	expect(cancelRate([makeTask({ status: 'To Do' })])).toBeNull();
 });
