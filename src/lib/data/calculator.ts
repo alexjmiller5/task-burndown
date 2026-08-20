@@ -15,23 +15,11 @@ function getAgeBand(task: Task, dateStr: string, tz: string): string {
 	return AGE_BAND_NAMES[AGE_BAND_NAMES.length - 1];
 }
 
-function getTaskTagsForDate(task: Task, dateStr: string): string[] {
-	if (task.history.length === 0) return task.tags;
-	let activeTags = task.tags;
-	for (const entry of task.history) {
-		if (entry.date > dateStr) break;
-		activeTags = entry.tags;
-	}
-	return activeTags;
-}
-
 /** Group keys for a task as of a given day — shared by the chart and the flow view. */
 export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: string): string[] {
 	switch (groupBy) {
-		case 'tag': {
-			const tags = getTaskTagsForDate(task, dateStr);
-			return tags.length > 0 ? tags : ['(Untagged)'];
-		}
+		case 'tag':
+			return task.tags.length > 0 ? task.tags : ['(Untagged)'];
 		case 'priority':
 			return [task.priority];
 		case 'project':

@@ -12,7 +12,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		tags: ['Work'],
 		priority: 'Medium',
 		projectName: '(No Project)',
-		history: [],
 		hasProject: false,
 		lastEditedTime: '2026-01-02T00:00:00.000Z',
 		...overrides
@@ -71,19 +70,6 @@ test('buildEventsMap — created and completed same day produces both events on 
 	expect(events.get('2026-05-04')?.created.length).toEqual(1);
 	expect(events.get('2026-05-04')?.completed.length).toEqual(1);
 	expect(events.get('2026-05-05')).toEqual(undefined);
-});
-
-test('buildEventsMap — history entries become stateChange events', () => {
-	const task = makeTask({
-		dueDate: '2026-05-01',
-		history: [
-			{ date: '2026-05-02', tags: ['Work'], dueDate: '2026-05-01' },
-			{ date: '2026-05-03', tags: ['Chore'], dueDate: '2026-05-01' }
-		]
-	});
-	const events = buildEventsMap([task], 'America/New_York');
-	expect(events.get('2026-05-02')?.stateChange.length).toEqual(1);
-	expect(events.get('2026-05-03')?.stateChange.length).toEqual(1);
 });
 
 test('getMinDate — empty list returns today in tz', () => {

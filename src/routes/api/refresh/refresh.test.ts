@@ -31,7 +31,6 @@ const task = {
 	tags: [],
 	priority: '(No Priority)',
 	projectName: '(No Project)',
-	history: [],
 	hasProject: false,
 	lastEditedTime: '2026-07-02T00:00:00.000Z'
 };
@@ -77,7 +76,6 @@ test('incremental merge, cache written', async () => {
 			Status: { status: { name: 'Not started' } },
 			Tags: { multi_select: [] },
 			Priority: { select: null },
-			'Tag & Date History': { rich_text: [] },
 			'Project Title': { rollup: { array: [] } }
 		}
 	};

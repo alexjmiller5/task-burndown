@@ -13,7 +13,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		tags: ['Work'],
 		priority: 'Medium',
 		projectName: '(No Project)',
-		history: [],
 		hasProject: false,
 		lastEditedTime: '2026-01-02T00:00:00.000Z',
 		...overrides
@@ -121,31 +120,6 @@ test('calculateDailyCounts — DST spring forward day arithmetic', () => {
 	});
 	const dates = result.map((r) => r.date);
 	expect(dates).toEqual(['2026-03-07', '2026-03-08', '2026-03-09', '2026-03-10']);
-});
-
-test('calculateDailyCounts — state change adds task to new tag bucket', () => {
-	const tasks = [
-		makeTask({
-			dueDate: '2026-05-01',
-			tags: ['Work'],
-			history: [{ date: '2026-05-03', tags: ['Chore'], dueDate: '2026-05-01' }]
-		})
-	];
-	const events = buildEventsMap(tasks, 'America/New_York');
-	const result = calculateDailyCounts({
-		events,
-		minDate: '2026-05-01',
-		limitDate: '2026-05-04',
-		groupBy: 'tag',
-		allCategories: ['Work', 'Chore'],
-		selectedCategories: new Set(['Work', 'Chore'])
-	});
-	// 5/1: Work=1, Chore=0
-	expect(result[0].Work).toEqual(1);
-	expect(result[0].Chore).toEqual(0);
-	// 5/3: state changed to Chore
-	expect(result[2].Work).toEqual(0);
-	expect(result[2].Chore).toEqual(1);
 });
 
 test('calculateDailyCounts — age group-by moves a task across band boundaries', () => {

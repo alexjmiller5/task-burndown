@@ -31,10 +31,6 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 			addEvent(completedDate, 'completed', task);
 		}
 
-		for (const h of task.history) {
-			addEvent(h.date, 'stateChange', task);
-		}
-
 		// Age-band crossings: the task's group changes on these days even without
 		// an edit. Harmless for other group-bys (unchanged keys are a no-op).
 		const createdDate = toLocalDateStr(task.created, tz);

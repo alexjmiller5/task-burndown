@@ -27,7 +27,7 @@ Requirements: Bun, 1Password CLI (`op`), wrangler (via Bun).
 - **Chart.js** for chart rendering (loaded client-side via dynamic import)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin
 - **shadcn-svelte** (Bits UI) for interactive controls — owned components under `src/lib/components/ui/` (`select`, `button`, `separator`), config in `components.json`, `cn()` in `src/lib/utils.ts`. Tokens are mapped to the app palette inside `app.css`'s `@theme`; `--color-muted` stays the legacy TEXT color, so the ui components' `bg-muted` surfaces are patched to `bg-secondary`. Dark-only: `class="dark"` on `<html>` + `@custom-variant dark`. A global rule gives all non-disabled buttons `cursor: pointer`; `tw-animate-css` provides the components' open/close animations. Select popovers min-width-match their trigger (`--bits-select-anchor-width`). Component-internal Lucide icons stay as-is (icons skill); control triggers use inline heroicons
-- **dayjs** for date manipulation in `src/lib/data/filters.ts` and `src/lib/data/history.ts`. All other date math is in `src/lib/data/timezone.ts` using `Intl.DateTimeFormat` for IANA timezone conversion (no dayjs plugins needed).
+- **dayjs** for date manipulation in `src/lib/data/filters.ts`. All other date math is in `src/lib/data/timezone.ts` using `Intl.DateTimeFormat` for IANA timezone conversion (no dayjs plugins needed).
 
 ### Cache — R2
 
@@ -49,7 +49,6 @@ Pure TypeScript modules shared between server and client:
 
 - `parser.ts` — `parseTasks(pages): ParsedData` parses Notion pages into **unfiltered** Task objects + metadata. No filtering; callers call `applyBaseFilters` themselves.
 - `merge.ts` — `mergeParsedData` (id-keyed merge of incremental result into cached tasks); `getIncrementalSince` (threshold = earlier of `max(created)` and `max(lastEditedTime)` across cached tasks).
-- `history.ts` — Parses "Tag & Date History" ledger field (format: `[YYYY-MM-DD HH:MM] --- Tags: [...], Due Date: ...`); sorts entries by timestamp (real ledgers are out-of-order with mixed-timezone stamps), treats the literal `None`/`undefined` as no due date, and collapses to the last state per day.
 - `filters.ts` — `applyBaseFilters` (cancelled/useless, called client-side after loading cache) and `applyViewFilters` (legacy cutoff, incomplete, project tasks — also client-side toggles).
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
@@ -121,11 +120,9 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 
 **Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The `/api/prune` id sweep handles this cheaply: fetch live page ids (slim `filter_properties[]=title` queries) for tasks that could plausibly change, drop sweep-eligible cached tasks not in the set. Accepted tradeoff: deleting an old, settled, non-open task won't be noticed until a full sync — such tasks are assumed immutable. The Sync button runs edits sync + sweep; the full re-parse loop is only needed to bootstrap an empty cache.
 
-**Timezone awareness**: The user picks a timezone from a curated list (default `America/New_York`). It _is_ persisted across reloads (localStorage via `preferences.ts`, along with groupBy, toggles, and preset — presets re-anchor to today on restore). The selected timezone affects: `created_time` → date bucketing, range presets ("today" anchor), the slider's right edge, and `totalActive`. It does _not_ affect Notion `dueDate`/`completed` (already date-only strings) or history ledger dates (date-only strings written in the user's local TZ at edit time).
+**Timezone awareness**: The user picks a timezone from a curated list (default `America/New_York`). It _is_ persisted across reloads (localStorage via `preferences.ts`, along with groupBy, toggles, and preset — presets re-anchor to today on restore). The selected timezone affects: `created_time` → date bucketing, range presets ("today" anchor), the slider's right edge, and `totalActive`. It does _not_ affect Notion `dueDate`/`completed` (already date-only strings).
 
 **DST safety**: `addDays` in `timezone.ts` uses `Date.UTC` + `setUTCDate` so calendar-day arithmetic never lands on the wrong day across DST transitions, regardless of host TZ.
-
-**History ledger**: Tasks have a "Tag & Date History" rich text field that records tag/due date changes over time. This enables historical accuracy — the chart shows what tags a task had on any given past date.
 
 **View filters**: Base filters (cancelled, useless) apply client-side via `applyBaseFilters` after loading the cache. Toggle filters (legacy cutoff 2025-01-10, incomplete tasks, project tasks) apply client-side for instant response.
 

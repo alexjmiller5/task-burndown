@@ -1,5 +1,4 @@
 import type { NotionPage, Task, ParsedData } from '$lib/types.js';
-import { parseHistoryLedger } from './history.js';
 
 function extractProp(props: Record<string, any>, name: string, type: string, sub?: string): any {
 	if (sub) return props[name]?.[type]?.[sub] ?? null;
@@ -14,10 +13,6 @@ function extractMultiSelect(
 		name: t.name,
 		color: t.color
 	}));
-}
-
-function extractRichText(props: Record<string, any>, name: string): string {
-	return props[name]?.rich_text?.[0]?.plain_text || '';
 }
 
 export const PRIORITY_ORDER = ['High', 'Medium', 'Low', '(No Priority)'];
@@ -44,7 +39,6 @@ function parseTask(page: NotionPage): Task {
 		tagObjects.push(...fallback);
 	}
 
-	const historyText = extractRichText(props, 'Tag & Date History');
 	const projectName = extractProjectTitle(props);
 	const priority = extractProp(props, 'Priority', 'select', 'name') || '(No Priority)';
 
@@ -57,7 +51,6 @@ function parseTask(page: NotionPage): Task {
 		tags: tagObjects.map((t) => t.name),
 		priority,
 		projectName,
-		history: parseHistoryLedger(historyText),
 		hasProject: projectName !== '(No Project)',
 		lastEditedTime: page.last_edited_time
 	};

@@ -17,15 +17,8 @@ export interface Task {
 	tags: string[];
 	priority: string;
 	projectName: string;
-	history: HistoryEntry[];
 	hasProject: boolean;
 	lastEditedTime: string;
-}
-
-export interface HistoryEntry {
-	date: string;
-	tags: string[];
-	dueDate: string | null;
 }
 
 export type DueDateCategory = 'Future' | 'Overdue' | 'Undated';
