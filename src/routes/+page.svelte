@@ -226,16 +226,7 @@
 	// (sampling the full series would date it beyond the range and lose it).
 	let avgTotals = $derived(rollingAvgTotals(dailyCounts));
 	let avgDueToDone = $derived(avgDueToCompletion(filteredTasks, timezone));
-	let cancelRate = $derived.by(() => {
-		let canceled = 0;
-		let completed = 0;
-		for (const t of allTasks) {
-			if (t.status === 'Canceled' || t.status === 'Cancelled') canceled++;
-			else if (t.status === 'Completed') completed++;
-		}
-		const total = canceled + completed;
-		return total === 0 ? null : (100 * canceled) / total;
-	});
+	let canceledPct = $derived(cancelRate(allTasks));
 	let displayCounts = $derived(
 		sampleDailyCounts(
 			dailyCounts.filter((d) => d.date >= dateStart && d.date <= dateEnd),
@@ -592,12 +583,12 @@
 					>
 				</div>
 			{/if}
-			{#if cancelRate !== null}
+			{#if canceledPct !== null}
 				<div class="hidden sm:block w-px h-6 bg-border-default"></div>
 				<div>
 					<span
 						class="font-[var(--font-mono)] text-xl sm:text-2xl md:text-3xl font-medium text-white"
-						>{cancelRate.toFixed(0)}%</span
+						>{canceledPct.toFixed(0)}%</span
 					>
 					<span class="text-muted text-xs font-[var(--font-mono)] uppercase tracking-wider ml-2"
 						>canceled</span

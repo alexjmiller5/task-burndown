@@ -100,3 +100,15 @@ export function avgDueToCompletion(tasks: Task[], tz: string): number | null {
 	}
 	return n === 0 ? null : sum / n;
 }
+
+/** Percentage of resolved tasks (completed or canceled) that were canceled; null if none resolved. */
+export function cancelRate(tasks: Task[]): number | null {
+	let canceled = 0;
+	let completed = 0;
+	for (const t of tasks) {
+		if (t.status === 'Canceled' || t.status === 'Cancelled') canceled++;
+		else if (t.status === 'Completed') completed++;
+	}
+	const resolved = canceled + completed;
+	return resolved === 0 ? null : (100 * canceled) / resolved;
+}
