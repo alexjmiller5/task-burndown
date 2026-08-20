@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Task, DayCount, GroupBy } from '$lib/types.js';
+	import type { Task, DayCount, GroupBy, ChartMode } from '$lib/types.js';
 	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
-	import { calculateDailyMetrics } from '$lib/data/metrics.js';
+	import { calculateDailyMetrics, calculateFlows, type FlowBucket } from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -13,7 +13,8 @@
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
-	import MetricsChart from '../components/MetricsChart.svelte';
+	import FlowChart from '../components/FlowChart.svelte';
+	import AgeChart from '../components/AgeChart.svelte';
 	import RangeSlider from '../components/RangeSlider.svelte';
 
 	const DEFAULT_TAGS = [
@@ -60,6 +61,18 @@
 	let includeProjectTasks: boolean = $state(true);
 	let showLegacyTags: boolean = $state(false);
 	let groupBy: GroupBy = $state('tag');
+	let chartMode: ChartMode = $state('active');
+	let flowBucket: FlowBucket = $state('day');
+
+	const CHART_MODES: { value: ChartMode; label: string }[] = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'flow', label: 'Flow' }
+	];
+	const FLOW_BUCKETS: { value: FlowBucket; label: string }[] = [
+		{ value: 'day', label: 'Day' },
+		{ value: 'week', label: 'Week' },
+		{ value: 'month', label: 'Month' }
+	];
 
 	let prefsLoaded = $state(false);
 
@@ -177,6 +190,9 @@
 	});
 
 	let dailyMetrics = $derived(calculateDailyMetrics(filteredTasks, timezone, minDate, SLIDER_MAX));
+	let flows = $derived(
+		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
+	);
 
 	function selectPreset(label: string) {
 		activePreset = label;
@@ -205,11 +221,13 @@
 		const legacy = showLegacyTags;
 		const projects = includeProjectTasks;
 		const grp = groupBy;
+		const mode = chartMode;
 		if (!prefsLoaded) return;
 		savePreferences({
 			version: 1,
 			timezone: tz,
 			groupBy: grp,
+			chartMode: mode,
 			showLegacyTags: legacy,
 			includeProjectTasks: projects,
 			preset: (PRESET_LABELS as readonly string[]).includes(preset)
@@ -398,6 +416,7 @@
 		if (stored) {
 			timezone = stored.timezone;
 			groupBy = stored.groupBy;
+			chartMode = stored.chartMode ?? 'active';
 			showLegacyTags = stored.showLegacyTags;
 			includeProjectTasks = stored.includeProjectTasks;
 			if (stored.preset !== null) {
@@ -412,6 +431,7 @@
 				dateEnd = stored.dateEnd;
 			}
 		}
+		if (typeof location !== 'undefined' && location.hash === '#flow') chartMode = 'flow';
 		prefsLoaded = true;
 
 		await loadTasks(); // paint from R2 cache immediately, then pull edits
@@ -451,25 +471,11 @@
 				</p>
 			</div>
 
-			{#if isRefreshingToday}
-				<div
-					class="hidden sm:flex items-center gap-2 text-muted font-[var(--font-mono)] text-xs uppercase tracking-wider mt-2"
-				>
-					<div class="loader"></div>
-					<span>Syncing</span>
-				</div>
-			{:else if refreshError}
+			{#if refreshError}
 				<div
 					class="hidden sm:flex items-center gap-2 text-red-400 font-[var(--font-mono)] text-xs mt-2"
 				>
 					<span>Sync failed</span>
-				</div>
-			{:else if baseTasks.length > 0}
-				<div
-					class="hidden sm:flex items-center gap-2 text-muted font-[var(--font-mono)] text-xs uppercase tracking-wider mt-2"
-				>
-					<div class="glow-dot"></div>
-					<span>Live</span>
 				</div>
 			{/if}
 		</div>
@@ -562,24 +568,6 @@
 					</select>
 				</label>
 
-				<!-- Range preset pill bar (desktop only) -->
-				<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
-					{#each PRESET_LABELS as label}
-						<button
-							onclick={() => selectPreset(label)}
-							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {activePreset ===
-							label
-								? ''
-								: 'preset-btn'}"
-							style={activePreset === label
-								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-								: ''}
-						>
-							{label}
-						</button>
-					{/each}
-				</div>
-
 				<!-- Group by dropdown (mobile only) -->
 				<label
 					class="flex sm:hidden items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
@@ -629,6 +617,44 @@
 						</button>
 					{/each}
 				</div>
+
+				<!-- Chart mode: active backlog vs created/completed flow -->
+				<div class="flex items-center gap-1 bg-black/30 rounded-control p-1">
+					{#each CHART_MODES as mode}
+						<button
+							onclick={() => (chartMode = mode.value)}
+							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {chartMode ===
+							mode.value
+								? ''
+								: 'preset-btn'}"
+							style={chartMode === mode.value
+								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
+								: ''}
+						>
+							{mode.label}
+						</button>
+					{/each}
+				</div>
+
+				<!-- Flow bucket (mobile; desktop copy sits in the slider row) -->
+				{#if chartMode === 'flow'}
+					<div class="flex sm:hidden items-center gap-1 bg-black/30 rounded-control p-1">
+						{#each FLOW_BUCKETS as b}
+							<button
+								onclick={() => (flowBucket = b.value)}
+								class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {flowBucket ===
+								b.value
+									? ''
+									: 'preset-btn'}"
+								style={flowBucket === b.value
+									? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
+									: ''}
+							>
+								{b.label}
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 
 			<!-- Row 2 (mobile) / Right half (desktop): side-controls -->
@@ -720,22 +746,18 @@
 				{#if groupBy === 'tag'}
 					<button
 						onclick={() => (showLegacyTags = !showLegacyTags)}
-						class="flex items-center gap-3 px-4 py-2 rounded-control border transition-all duration-150"
+						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
 						style={showLegacyTags
 							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
 							: 'border-color: var(--color-border-default); background: transparent;'}
+						title="Include legacy tags"
 					>
 						<div
-							class="relative w-8 h-[18px] rounded-full transition-colors duration-150"
+							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
 							style="background: {showLegacyTags
 								? 'var(--color-bitcoin)'
 								: 'var(--color-border-strong)'};"
-						>
-							<div
-								class="absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-150"
-								style="left: {showLegacyTags ? '15px' : '2px'};"
-							></div>
-						</div>
+						></div>
 						<span
 							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
 							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
@@ -747,22 +769,18 @@
 				{#if groupBy !== 'project'}
 					<button
 						onclick={() => (includeProjectTasks = !includeProjectTasks)}
-						class="flex items-center gap-3 px-4 py-2 rounded-control border transition-all duration-150"
+						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
 						style={includeProjectTasks
 							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
 							: 'border-color: var(--color-border-default); background: transparent;'}
+						title="Include project tasks"
 					>
 						<div
-							class="relative w-8 h-[18px] rounded-full transition-colors duration-150"
+							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
 							style="background: {includeProjectTasks
 								? 'var(--color-bitcoin)'
 								: 'var(--color-border-strong)'};"
-						>
-							<div
-								class="absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white shadow-sm transition-all duration-150"
-								style="left: {includeProjectTasks ? '15px' : '2px'};"
-							></div>
-						</div>
+						></div>
 						<span
 							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
 							style="color: {includeProjectTasks ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
@@ -773,15 +791,51 @@
 			</div>
 		</div>
 
-		<!-- Range slider — between controls and chart on desktop; between controls and stats on mobile -->
-		<div class="order-2 sm:order-2 mt-3 mb-0 sm:mt-0 sm:mb-4 px-1">
-			<RangeSlider
-				min={SLIDER_MIN}
-				max={SLIDER_MAX}
-				start={dateStart}
-				end={dateEnd}
-				onchange={handleSliderChange}
-			/>
+		<!-- Time controls — presets + slider (+ flow bucket) share a row: one concern, one place -->
+		<div class="order-2 sm:order-2 mt-3 mb-0 sm:mt-0 sm:mb-4 px-1 flex items-center gap-3">
+			<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
+				{#each PRESET_LABELS as label}
+					<button
+						onclick={() => selectPreset(label)}
+						class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {activePreset ===
+						label
+							? ''
+							: 'preset-btn'}"
+						style={activePreset === label
+							? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
+							: ''}
+					>
+						{label}
+					</button>
+				{/each}
+			</div>
+			<div class="flex-1 min-w-0">
+				<RangeSlider
+					min={SLIDER_MIN}
+					max={SLIDER_MAX}
+					start={dateStart}
+					end={dateEnd}
+					onchange={handleSliderChange}
+				/>
+			</div>
+			{#if chartMode === 'flow'}
+				<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
+					{#each FLOW_BUCKETS as b}
+						<button
+							onclick={() => (flowBucket = b.value)}
+							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {flowBucket ===
+							b.value
+								? ''
+								: 'preset-btn'}"
+							style={flowBucket === b.value
+								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
+								: ''}
+						>
+							{b.label}
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Chart — top on mobile, bottom on desktop -->
@@ -798,33 +852,35 @@
 			<div
 				class="order-1 sm:order-3 flex-1 min-h-0 sm:flex-none sm:h-[var(--chart-height-tablet)] lg:h-[var(--chart-height-desktop)]"
 			>
-				<TaskChart
-					{dailyCounts}
-					{categories}
-					dateRange={{ start: dateStart, end: dateEnd }}
-					tagColors={chartColors}
-					{hiddenByDefault}
-				/>
+				{#if chartMode === 'flow'}
+					<FlowChart
+						{flows}
+						bucket={flowBucket}
+						{categories}
+						colorMap={chartColors}
+						{hiddenByDefault}
+					/>
+				{:else}
+					<TaskChart
+						{dailyCounts}
+						{categories}
+						dateRange={{ start: dateStart, end: dateEnd }}
+						tagColors={chartColors}
+						{hiddenByDefault}
+					/>
+				{/if}
 			</div>
 		{/if}
 	</div>
 
-	<!-- Metrics panel — age / push-back / flow companion charts. Desktop only:
+	<!-- Age panel — avg/p90 open age + age-at-completion. Desktop only:
 	     the mobile layout is locked to one viewport for the main chart. -->
 	{#if baseTasks.length > 0}
 		<div
 			class="hidden sm:block order-4 rounded-card border border-border-default bg-surface p-6 h-[340px]"
 			style="box-shadow: 0 0 60px -20px var(--color-bitcoin-glow-soft);"
 		>
-			<MetricsChart
-				metrics={dailyMetrics}
-				tasks={filteredTasks}
-				tz={timezone}
-				{groupBy}
-				{categories}
-				colorMap={chartColors}
-				dateRange={{ start: dateStart, end: dateEnd }}
-			/>
+			<AgeChart metrics={dailyMetrics} dateRange={{ start: dateStart, end: dateEnd }} />
 		</div>
 	{/if}
 </div>

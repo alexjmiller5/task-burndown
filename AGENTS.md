@@ -79,11 +79,12 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 ### Components (`src/components/`)
 
 - `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp)
-- `MetricsChart.svelte` — tabbed companion panel (Age / Flow) below the main chart, desktop-only; initial tab can be deep-linked via URL hash (`#flow`). Flow stacks by the main chart's active group-by with a Day/Week/Month bucket switch (default Day — a bar per date, like the main chart); legend entries toggle both directions of a category
-- `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by both charts
+- `FlowChart.svelte` — created-up/completed-down mirrored bars for the main chart's Flow mode, stacked by the active group-by; legend entries toggle both directions of a category
+- `AgeChart.svelte` — the companion panel below the main chart (desktop-only): avg open age, p90 open age, rolling age-at-completion lines
+- `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
-UI controls (range presets, group-by selector, timezone dropdown, Edits/Sync buttons, toggle switches) are inlined in `src/routes/+page.svelte` rather than extracted into components. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical.
+UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components, in two rows: the top row is view shape (group-by pills, Active/Flow chart-mode pills; right side: timezone, Edits/Sync, Legacy/Projects filter chips), and the slider row holds all time controls (range presets, the slider, and — in Flow mode — Day/Week/Month bucket pills). The main chart's mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
 
 ## Secrets
 

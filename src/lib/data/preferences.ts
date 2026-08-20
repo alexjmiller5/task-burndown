@@ -1,4 +1,4 @@
-import type { GroupBy } from '$lib/types.js';
+import type { ChartMode, GroupBy } from '$lib/types.js';
 import { PRESET_LABELS, type PresetLabel } from './presets.ts';
 
 export const STORAGE_KEY = 'burndown:prefs:v1';
@@ -7,6 +7,7 @@ export interface StoredPreferences {
 	version: 1;
 	timezone: string;
 	groupBy: GroupBy;
+	chartMode?: ChartMode;
 	showLegacyTags: boolean;
 	includeProjectTasks: boolean;
 	preset: PresetLabel | null;
@@ -30,6 +31,7 @@ function isValid(parsed: unknown): parsed is StoredPreferences {
 	if (p.version !== 1) return false;
 	if (typeof p.timezone !== 'string') return false;
 	if (typeof p.groupBy !== 'string' || !VALID_GROUP_BY.includes(p.groupBy as GroupBy)) return false;
+	if (p.chartMode !== undefined && p.chartMode !== 'active' && p.chartMode !== 'flow') return false;
 	if (typeof p.showLegacyTags !== 'boolean') return false;
 	if (typeof p.includeProjectTasks !== 'boolean') return false;
 	if (p.preset !== null && !PRESET_LABELS.includes(p.preset as PresetLabel)) return false;
