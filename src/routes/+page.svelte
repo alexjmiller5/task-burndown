@@ -18,6 +18,7 @@
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
 	import { DEFAULT_TIMEZONE, TIMEZONES, getCurrentDateStr } from '$lib/data/timezone.js';
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
+	import { MARKERS } from '$lib/markers.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
 	import FlowChart from '../components/FlowChart.svelte';
@@ -68,6 +69,7 @@
 	let dateEnd: string = $state(initial90D.end);
 	let includeProjectTasks: boolean = $state(true);
 	let includeCanceled: boolean = $state(false);
+	let showMarkers: boolean = $state(true);
 	let showLegacyTags: boolean = $state(false);
 	let groupBy: GroupBy = $state('tag');
 	let chartMode: ChartMode = $state('active');
@@ -255,6 +257,7 @@
 		const legacy = showLegacyTags;
 		const projects = includeProjectTasks;
 		const canceled = includeCanceled;
+		const marks = showMarkers;
 		const grp = groupBy;
 		const mode = chartMode;
 		if (!prefsLoaded) return;
@@ -266,6 +269,7 @@
 			showLegacyTags: legacy,
 			includeProjectTasks: projects,
 			includeCanceled: canceled,
+			showMarkers: marks,
 			preset: (PRESET_LABELS as readonly string[]).includes(preset)
 				? (preset as PresetLabel)
 				: null,
@@ -456,6 +460,7 @@
 			showLegacyTags = stored.showLegacyTags;
 			includeProjectTasks = stored.includeProjectTasks;
 			includeCanceled = stored.includeCanceled ?? false;
+			showMarkers = stored.showMarkers ?? true;
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
 				const range = getPresetRange(stored.preset, stored.timezone);
@@ -747,6 +752,28 @@
 						>Canceled</span
 					>
 				</Button>
+
+				<Button
+					variant="outline"
+					onclick={() => (showMarkers = !showMarkers)}
+					class={CHIP_BTN_CLASS}
+					style={showMarkers
+						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
+						: 'border-color: var(--color-border-default); background: transparent;'}
+					title="Show event markers"
+				>
+					<div
+						class="size-1.5 rounded-full transition-colors duration-150"
+						style="background: {showMarkers
+							? 'var(--color-bitcoin)'
+							: 'var(--color-border-strong)'};"
+					></div>
+					<span
+						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
+						style="color: {showMarkers ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
+						>Markers</span
+					>
+				</Button>
 			</div>
 
 			<!-- Right side: sync actions only -->
@@ -818,6 +845,7 @@
 						tagColors={chartColors}
 						{hiddenByDefault}
 						averages={avgTotals}
+						markers={showMarkers ? MARKERS : []}
 					/>
 				{/if}
 			</div>

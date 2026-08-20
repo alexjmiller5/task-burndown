@@ -11,6 +11,7 @@ export interface StoredPreferences {
 	showLegacyTags: boolean;
 	includeProjectTasks: boolean;
 	includeCanceled?: boolean;
+	showMarkers?: boolean;
 	preset: PresetLabel | null;
 	dateStart?: string;
 	dateEnd?: string;
@@ -36,6 +37,7 @@ function isValid(parsed: unknown): parsed is StoredPreferences {
 	if (typeof p.showLegacyTags !== 'boolean') return false;
 	if (typeof p.includeProjectTasks !== 'boolean') return false;
 	if (p.includeCanceled !== undefined && typeof p.includeCanceled !== 'boolean') return false;
+	if (p.showMarkers !== undefined && typeof p.showMarkers !== 'boolean') return false;
 	if (p.preset !== null && !PRESET_LABELS.includes(p.preset as PresetLabel)) return false;
 	if (p.dateStart !== undefined && typeof p.dateStart !== 'string') return false;
 	if (p.dateEnd !== undefined && typeof p.dateEnd !== 'string') return false;
