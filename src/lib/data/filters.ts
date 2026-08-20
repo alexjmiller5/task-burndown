@@ -9,11 +9,12 @@ export interface FilterOptions {
 	includeProjectTasks: boolean;
 }
 
-/** Server-side: remove tasks that should never be shown */
-export function applyBaseFilters(tasks: Task[]): Task[] {
+/** Remove tasks that should never be shown; canceled ones only when toggled in. */
+export function applyBaseFilters(tasks: Task[], includeCanceled = false): Task[] {
 	return tasks.filter((task) => {
 		if (!task.created) return false;
-		if (task.status === 'Cancelled' || task.status === 'Canceled') return false;
+		if (!includeCanceled && (task.status === 'Cancelled' || task.status === 'Canceled'))
+			return false;
 		if (task.tags.includes('useless')) return false;
 		return true;
 	});

@@ -49,7 +49,7 @@ Pure TypeScript modules shared between server and client:
 
 - `parser.ts` — `parseTasks(pages): ParsedData` parses Notion pages into **unfiltered** Task objects + metadata. No filtering; callers call `applyBaseFilters` themselves.
 - `merge.ts` — `mergeParsedData` (id-keyed merge of incremental result into cached tasks); `getIncrementalSince` (threshold = earlier of `max(created)` and `max(lastEditedTime)` across cached tasks).
-- `filters.ts` — `applyBaseFilters` (cancelled/useless, called client-side after loading cache) and `applyViewFilters` (legacy cutoff, incomplete, project tasks — also client-side toggles).
+- `filters.ts` — `applyBaseFilters` (useless always; canceled unless the Canceled chip toggles them in) and `applyViewFilters` (legacy cutoff, incomplete, project tasks — also client-side toggles).
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
@@ -83,7 +83,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
-UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components. Every selector is a shadcn Select (icon + mono-uppercase trigger, dark popover), identical on all viewports: range preset, group-by, Active/Flow chart mode, time bucket (Day/Week/Month — Flow aggregates counts per bucket; Active downsamples to the last day of each bucket), timezone, plus the Legacy/Projects filter chips — all on the left; the right side holds only the Edits and Sync buttons. The chart mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
+UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components. Every selector is a shadcn Select (icon + mono-uppercase trigger, dark popover), identical on all viewports: range preset, group-by, Active/Flow chart mode, time bucket (Day/Week/Month — Flow aggregates counts per bucket; Active downsamples to the last day of each bucket), timezone, plus the Legacy/Projects/Canceled filter chips — all on the left; the right side holds only the Edits and Sync buttons. The chart mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
 
 ## Secrets
 
@@ -110,7 +110,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 93 tests as of the flow-mode work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 95 tests as of the flow-mode work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 

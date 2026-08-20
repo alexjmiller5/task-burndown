@@ -3,6 +3,7 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
+	import { MARKERS } from '$lib/markers.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -12,6 +13,7 @@
 		tagColors: Record<string, string>;
 		hiddenByDefault?: string[];
 		bucket?: FlowBucket;
+		averages?: Record<string, number>;
 	}
 
 	let {
@@ -20,8 +22,38 @@
 		dateRange,
 		tagColors,
 		hiddenByDefault = [],
-		bucket = 'day'
+		bucket = 'day',
+		averages = {}
 	}: Props = $props();
+
+	// Vertical event lines for the manual markers (time-axis buckets only)
+	const markerPlugin = {
+		id: 'eventMarkers',
+		afterDatasetsDraw(c: any) {
+			const x = c.scales.x;
+			if (!x || x.type !== 'time') return;
+			const { ctx, chartArea } = c;
+			for (const m of MARKERS) {
+				const px = x.getPixelForValue(new Date(`${m.date}T12:00:00`).getTime());
+				if (px < chartArea.left || px > chartArea.right) continue;
+				ctx.save();
+				ctx.strokeStyle = 'rgba(247, 147, 26, 0.5)';
+				ctx.setLineDash([4, 4]);
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.moveTo(px, chartArea.top);
+				ctx.lineTo(px, chartArea.bottom);
+				ctx.stroke();
+				ctx.setLineDash([]);
+				ctx.fillStyle = '#F7931A';
+				ctx.font = '10px JetBrains Mono';
+				ctx.translate(px - 4, chartArea.top + 4);
+				ctx.rotate(Math.PI / 2);
+				ctx.fillText(m.label, 0, 0);
+				ctx.restore();
+			}
+		}
+	};
 
 	let canvas: HTMLCanvasElement;
 	let chart: any = null;
@@ -78,18 +110,33 @@
 			type: 'bar' as const,
 			data: {
 				labels: visible.map((d) => d.date),
-				datasets: cats.map((cat, i) => {
-					const color = getSeriesColor(cat, tagColors, i);
-					return {
-						label: cat,
-						data: visible.map((d) => (d[cat] as number) || 0),
-						backgroundColor: color.bg,
-						borderColor: color.border,
-						borderWidth: 1,
-						borderRadius: 2,
-						stack: 'stack0'
-					};
-				})
+				datasets: [
+					// First dataset draws on top: the 2-week average line over the bars
+					{
+						type: 'line' as const,
+						label: '14d avg',
+						data: visible.map((d) => averages[d.date] ?? null),
+						borderColor: '#FFD600',
+						backgroundColor: '#FFD600',
+						borderWidth: 2,
+						pointRadius: 0,
+						pointHitRadius: 8,
+						tension: 0.3,
+						spanGaps: true
+					},
+					...cats.map((cat, i) => {
+						const color = getSeriesColor(cat, tagColors, i);
+						return {
+							label: cat,
+							data: visible.map((d) => (d[cat] as number) || 0),
+							backgroundColor: color.bg,
+							borderColor: color.border,
+							borderWidth: 1,
+							borderRadius: 2,
+							stack: 'stack0'
+						};
+					})
+				]
 			},
 			options: {
 				responsive: true,
@@ -140,8 +187,16 @@
 								if (bucket === 'week') return `Week ending ${d.format('MMM D')}`;
 								return d.format('MMM D, YYYY');
 							},
+							label: (item: any) =>
+								item.dataset.type === 'line'
+									? `${item.dataset.label}: ${Math.round(item.raw)}`
+									: `${item.dataset.label}: ${item.raw}`,
 							footer: (items: any[]) => {
-								const total = items.reduce((sum: number, item: any) => sum + (item.raw || 0), 0);
+								const total = items.reduce(
+									(sum: number, item: any) =>
+										item.dataset.type === 'line' ? sum : sum + (item.raw || 0),
+									0
+								);
 								return `Total: ${total}`;
 							}
 						},
@@ -168,7 +223,10 @@
 	function rebuildChart() {
 		if (!ChartJS || !canvas) return;
 		chart?.destroy();
-		chart = new ChartJS(canvas, buildConfig(dailyCounts, categories, dateRange));
+		chart = new ChartJS(canvas, {
+			...buildConfig(dailyCounts, categories, dateRange),
+			plugins: [markerPlugin]
+		});
 		// Hide datasets that should be off by default (e.g. "(No Project)")
 		if (hiddenByDefault.length > 0) {
 			for (let i = 0; i < chart.data.datasets.length; i++) {
@@ -211,6 +269,7 @@
 		const _tc = tagColors;
 		const _h = hiddenByDefault;
 		const _b = bucket;
+		const _a = averages;
 		const _m = isMobile;
 		// Rebuild on any change
 		rebuildChart();
