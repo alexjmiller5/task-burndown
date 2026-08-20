@@ -8,6 +8,7 @@
 	import {
 		avgDueToCompletion,
 		calculateFlows,
+		cancelRate,
 		rollingAvgTotals,
 		sampleDailyCounts,
 		type FlowBucket
