@@ -535,9 +535,9 @@
 		>
 			<!-- Row 1 (mobile) / Left half (desktop): view-shape controls -->
 			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
-				<!-- Range preset dropdown (mobile only) -->
+				<!-- Range preset dropdown -->
 				<label
-					class="flex sm:hidden items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
+					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
 					title="Date range"
 				>
 					<svg
@@ -568,9 +568,9 @@
 					</select>
 				</label>
 
-				<!-- Group by dropdown (mobile only) -->
+				<!-- Group by dropdown -->
 				<label
-					class="flex sm:hidden items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
+					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
 					title="Group by"
 				>
 					<svg
@@ -600,65 +600,70 @@
 					</select>
 				</label>
 
-				<!-- Group by pill bar (desktop only) -->
-				<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
-					{#each GROUP_BY_OPTIONS as option}
-						<button
-							onclick={() => (groupBy = option.value)}
-							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {groupBy ===
-							option.value
-								? ''
-								: 'preset-btn'}"
-							style={groupBy === option.value
-								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-								: ''}
-						>
-							{option.label}
-						</button>
-					{/each}
-				</div>
-
 				<!-- Chart mode: active backlog vs created/completed flow -->
-				<div class="flex items-center gap-1 bg-black/30 rounded-control p-1">
-					{#each CHART_MODES as mode}
-						<button
-							onclick={() => (chartMode = mode.value)}
-							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {chartMode ===
-							mode.value
-								? ''
-								: 'preset-btn'}"
-							style={chartMode === mode.value
-								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-								: ''}
-						>
-							{mode.label}
-						</button>
-					{/each}
-				</div>
-
-				<!-- Flow bucket (mobile; desktop copy sits in the slider row) -->
-				{#if chartMode === 'flow'}
-					<div class="flex sm:hidden items-center gap-1 bg-black/30 rounded-control p-1">
-						{#each FLOW_BUCKETS as b}
-							<button
-								onclick={() => (flowBucket = b.value)}
-								class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {flowBucket ===
-								b.value
-									? ''
-									: 'preset-btn'}"
-								style={flowBucket === b.value
-									? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-									: ''}
+				<label
+					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
+					title="Chart mode"
+				>
+					<svg
+						class="w-4 h-4 text-muted"
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						aria-hidden="true"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
+						/>
+					</svg>
+					<select
+						bind:value={chartMode}
+						class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
+					>
+						{#each CHART_MODES as mode}
+							<option value={mode.value} class="bg-surface text-white normal-case"
+								>{mode.label}</option
 							>
-								{b.label}
-							</button>
 						{/each}
-					</div>
-				{/if}
-			</div>
+					</select>
+				</label>
 
-			<!-- Row 2 (mobile) / Right half (desktop): side-controls -->
-			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
+				<!-- Flow bucket (only in flow mode) -->
+				{#if chartMode === 'flow'}
+					<label
+						class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
+						title="Flow bucket"
+					>
+						<svg
+							class="w-4 h-4 text-muted"
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+							stroke-width="1.5"
+							stroke="currentColor"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z"
+							/>
+						</svg>
+						<select
+							bind:value={flowBucket}
+							class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
+						>
+							{#each FLOW_BUCKETS as b}
+								<option value={b.value} class="bg-surface text-white normal-case">{b.label}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
+
 				<!-- Timezone selector -->
 				<label
 					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
@@ -689,6 +694,55 @@
 					</select>
 				</label>
 
+				{#if groupBy === 'tag'}
+					<button
+						onclick={() => (showLegacyTags = !showLegacyTags)}
+						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
+						style={showLegacyTags
+							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
+							: 'border-color: var(--color-border-default); background: transparent;'}
+						title="Include legacy tags"
+					>
+						<div
+							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
+							style="background: {showLegacyTags
+								? 'var(--color-bitcoin)'
+								: 'var(--color-border-strong)'};"
+						></div>
+						<span
+							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
+							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
+							>Legacy</span
+						>
+					</button>
+				{/if}
+
+				{#if groupBy !== 'project'}
+					<button
+						onclick={() => (includeProjectTasks = !includeProjectTasks)}
+						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
+						style={includeProjectTasks
+							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
+							: 'border-color: var(--color-border-default); background: transparent;'}
+						title="Include project tasks"
+					>
+						<div
+							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
+							style="background: {includeProjectTasks
+								? 'var(--color-bitcoin)'
+								: 'var(--color-border-strong)'};"
+						></div>
+						<span
+							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
+							style="color: {includeProjectTasks ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
+							>Projects</span
+						>
+					</button>
+				{/if}
+			</div>
+
+			<!-- Right side: sync actions only -->
+			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
 				<!-- Refresh edits button -->
 				<button
 					onclick={refreshEdits}
@@ -742,100 +796,18 @@
 						{isFullSyncing ? `Sync ${syncProgress}` : 'Sync'}
 					</span>
 				</button>
-
-				{#if groupBy === 'tag'}
-					<button
-						onclick={() => (showLegacyTags = !showLegacyTags)}
-						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
-						style={showLegacyTags
-							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-							: 'border-color: var(--color-border-default); background: transparent;'}
-						title="Include legacy tags"
-					>
-						<div
-							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
-							style="background: {showLegacyTags
-								? 'var(--color-bitcoin)'
-								: 'var(--color-border-strong)'};"
-						></div>
-						<span
-							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-							>Legacy</span
-						>
-					</button>
-				{/if}
-
-				{#if groupBy !== 'project'}
-					<button
-						onclick={() => (includeProjectTasks = !includeProjectTasks)}
-						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
-						style={includeProjectTasks
-							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-							: 'border-color: var(--color-border-default); background: transparent;'}
-						title="Include project tasks"
-					>
-						<div
-							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
-							style="background: {includeProjectTasks
-								? 'var(--color-bitcoin)'
-								: 'var(--color-border-strong)'};"
-						></div>
-						<span
-							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-							style="color: {includeProjectTasks ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-							>Projects</span
-						>
-					</button>
-				{/if}
 			</div>
 		</div>
 
-		<!-- Time controls — presets + slider (+ flow bucket) share a row: one concern, one place -->
-		<div class="order-2 sm:order-2 mt-3 mb-0 sm:mt-0 sm:mb-4 px-1 flex items-center gap-3">
-			<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
-				{#each PRESET_LABELS as label}
-					<button
-						onclick={() => selectPreset(label)}
-						class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {activePreset ===
-						label
-							? ''
-							: 'preset-btn'}"
-						style={activePreset === label
-							? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-							: ''}
-					>
-						{label}
-					</button>
-				{/each}
-			</div>
-			<div class="flex-1 min-w-0">
-				<RangeSlider
-					min={SLIDER_MIN}
-					max={SLIDER_MAX}
-					start={dateStart}
-					end={dateEnd}
-					onchange={handleSliderChange}
-				/>
-			</div>
-			{#if chartMode === 'flow'}
-				<div class="hidden sm:flex items-center gap-1 bg-black/30 rounded-control p-1">
-					{#each FLOW_BUCKETS as b}
-						<button
-							onclick={() => (flowBucket = b.value)}
-							class="px-3 py-1.5 rounded-pill text-xs font-[var(--font-mono)] uppercase tracking-wider transition-all duration-150 {flowBucket ===
-							b.value
-								? ''
-								: 'preset-btn'}"
-							style={flowBucket === b.value
-								? 'background: var(--color-bitcoin); color: black; font-weight: 500; box-shadow: 0 0 16px -4px var(--color-bitcoin-glow-strong);'
-								: ''}
-						>
-							{b.label}
-						</button>
-					{/each}
-				</div>
-			{/if}
+		<!-- Range slider — between controls and chart on desktop; between controls and stats on mobile -->
+		<div class="order-2 sm:order-2 mt-3 mb-0 sm:mt-0 sm:mb-4 px-1">
+			<RangeSlider
+				min={SLIDER_MIN}
+				max={SLIDER_MAX}
+				start={dateStart}
+				end={dateEnd}
+				onchange={handleSliderChange}
+			/>
 		</div>
 
 		<!-- Chart — top on mobile, bottom on desktop -->

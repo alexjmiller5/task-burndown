@@ -84,7 +84,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
-UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components, in two rows: the top row is view shape (group-by pills, Active/Flow chart-mode pills; right side: timezone, Edits/Sync, Legacy/Projects filter chips), and the slider row holds all time controls (range presets, the slider, and — in Flow mode — Day/Week/Month bucket pills). The main chart's mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
+UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components. Every selector is an icon+select dropdown in the timezone-control style, identical on all viewports: range preset, group-by, Active/Flow chart mode, flow bucket (Day/Week/Month, flow mode only), timezone, plus the Legacy/Projects filter chips — all on the left; the right side holds only the Edits and Sync buttons. The chart mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
 
 ## Secrets
 
