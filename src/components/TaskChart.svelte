@@ -3,7 +3,7 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
-	import { MARKERS } from '$lib/markers.js';
+	import type { ChartMarker } from '$lib/markers.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -14,6 +14,7 @@
 		hiddenByDefault?: string[];
 		bucket?: FlowBucket;
 		averages?: Record<string, number>;
+		markers?: ChartMarker[];
 	}
 
 	let {
@@ -23,7 +24,8 @@
 		tagColors,
 		hiddenByDefault = [],
 		bucket = 'day',
-		averages = {}
+		averages = {},
+		markers = []
 	}: Props = $props();
 
 	// Vertical event lines for the manual markers (time-axis buckets only)
@@ -33,11 +35,13 @@
 			const x = c.scales.x;
 			if (!x || x.type !== 'time') return;
 			const { ctx, chartArea } = c;
-			for (const m of MARKERS) {
+			for (const m of markers) {
 				const px = x.getPixelForValue(new Date(`${m.date}T12:00:00`).getTime());
 				if (px < chartArea.left || px > chartArea.right) continue;
+				// up = blue (like Created), down = green (like Completed)
+				const color = m.direction === 'up' ? '59, 130, 246' : '34, 197, 94';
 				ctx.save();
-				ctx.strokeStyle = 'rgba(247, 147, 26, 0.5)';
+				ctx.strokeStyle = `rgba(${color}, 0.6)`;
 				ctx.setLineDash([4, 4]);
 				ctx.lineWidth = 1;
 				ctx.beginPath();
@@ -45,7 +49,7 @@
 				ctx.lineTo(px, chartArea.bottom);
 				ctx.stroke();
 				ctx.setLineDash([]);
-				ctx.fillStyle = '#F7931A';
+				ctx.fillStyle = `rgb(${color})`;
 				ctx.font = '10px JetBrains Mono';
 				ctx.translate(px - 4, chartArea.top + 4);
 				ctx.rotate(Math.PI / 2);
@@ -270,6 +274,7 @@
 		const _h = hiddenByDefault;
 		const _b = bucket;
 		const _a = averages;
+		const _mk = markers;
 		const _m = isMobile;
 		// Rebuild on any change
 		rebuildChart();
