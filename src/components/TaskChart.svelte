@@ -35,9 +35,26 @@
 			const x = c.scales.x;
 			if (!x || x.type !== 'time') return;
 			const { ctx, chartArea } = c;
+			const px = (d: string) => x.getPixelForValue(new Date(`${d}T12:00:00`).getTime());
 			for (const m of markers) {
-				const px = x.getPixelForValue(new Date(`${m.date}T12:00:00`).getTime());
-				if (px < chartArea.left || px > chartArea.right) continue;
+				if (m.direction === 'flat') {
+					// stagnation band: shaded range with the label at its start
+					const a = Math.max(px(m.date), chartArea.left);
+					const b = Math.min(px(m.end ?? m.date), chartArea.right);
+					if (b <= chartArea.left || a >= chartArea.right) continue;
+					ctx.save();
+					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
+					ctx.fillStyle = 'rgba(148, 163, 184, 0.9)';
+					ctx.font = '10px JetBrains Mono';
+					ctx.translate(a + 10, chartArea.top + 4);
+					ctx.rotate(Math.PI / 2);
+					ctx.fillText(m.label, 0, 0);
+					ctx.restore();
+					continue;
+				}
+				const p = px(m.date);
+				if (p < chartArea.left || p > chartArea.right) continue;
 				// up = blue (like Created), down = green (like Completed)
 				const color = m.direction === 'up' ? '59, 130, 246' : '34, 197, 94';
 				ctx.save();
@@ -45,13 +62,13 @@
 				ctx.setLineDash([4, 4]);
 				ctx.lineWidth = 1;
 				ctx.beginPath();
-				ctx.moveTo(px, chartArea.top);
-				ctx.lineTo(px, chartArea.bottom);
+				ctx.moveTo(p, chartArea.top);
+				ctx.lineTo(p, chartArea.bottom);
 				ctx.stroke();
 				ctx.setLineDash([]);
 				ctx.fillStyle = `rgb(${color})`;
 				ctx.font = '10px JetBrains Mono';
-				ctx.translate(px - 4, chartArea.top + 4);
+				ctx.translate(p - 4, chartArea.top + 4);
 				ctx.rotate(Math.PI / 2);
 				ctx.fillText(m.label, 0, 0);
 				ctx.restore();
