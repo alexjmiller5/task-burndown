@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { DayCount } from '$lib/types.js';
+	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
 
 	interface Props {
@@ -9,9 +10,17 @@
 		dateRange: { start: string; end: string };
 		tagColors: Record<string, string>;
 		hiddenByDefault?: string[];
+		bucket?: FlowBucket;
 	}
 
-	let { dailyCounts, categories, dateRange, tagColors, hiddenByDefault = [] }: Props = $props();
+	let {
+		dailyCounts,
+		categories,
+		dateRange,
+		tagColors,
+		hiddenByDefault = [],
+		bucket = 'day'
+	}: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let chart: any = null;
@@ -175,6 +184,7 @@
 		const _r = dateRange;
 		const _tc = tagColors;
 		const _h = hiddenByDefault;
+		const _b = bucket;
 		const _m = isMobile;
 		// Rebuild on any change
 		rebuildChart();

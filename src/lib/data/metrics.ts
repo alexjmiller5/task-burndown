@@ -1,4 +1,4 @@
-import type { GroupBy, Task } from '$lib/types.js';
+import type { DayCount, GroupBy, Task } from '$lib/types.js';
 import { getGroupKeys } from './calculator.ts';
 import { addDays, toLocalDateStr } from './timezone.ts';
 
@@ -61,4 +61,18 @@ export function calculateFlows(
 		if (task.completed) count(toLocalDateStr(task.completed, tz), task, 'completed');
 	}
 	return Array.from(rows.values());
+}
+
+/**
+ * Downsample a daily series to one entry per bucket — the last day of each
+ * bucket (an honest snapshot with a real date), for the Active view's
+ * week/month buckets. 'day' passes through unchanged.
+ */
+export function sampleDailyCounts(days: DayCount[], bucket: FlowBucket): DayCount[] {
+	if (bucket === 'day') return days;
+	const lastPerBucket = new Map<string, DayCount>();
+	for (const d of days) {
+		lastPerBucket.set(bucketLabel(d.date, bucket), d);
+	}
+	return Array.from(lastPerBucket.values());
 }

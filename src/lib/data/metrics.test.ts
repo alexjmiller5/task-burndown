@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { calculateFlows } from './metrics.ts';
+import { calculateFlows, sampleDailyCounts } from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -90,4 +90,30 @@ test('calculateFlows month buckets answer "how many did I create in July"', () =
 		{ label: '2026-07', created: { Medium: 2 }, completed: {} },
 		{ label: '2026-08', created: {}, completed: { Medium: 1 } }
 	]);
+});
+
+test('sampleDailyCounts keeps the last day of each week bucket', () => {
+	const days = [
+		{ date: '2026-07-07', total: 5 }, // Tue, week of 07-06
+		{ date: '2026-07-12', total: 8 }, // Sun, week of 07-06
+		{ date: '2026-07-13', total: 9 }, // Mon, week of 07-13 (partial)
+		{ date: '2026-07-14', total: 11 }
+	];
+	expect(sampleDailyCounts(days, 'week')).toEqual([
+		{ date: '2026-07-12', total: 8 },
+		{ date: '2026-07-14', total: 11 }
+	]);
+});
+
+test('sampleDailyCounts month buckets and day passthrough', () => {
+	const days = [
+		{ date: '2026-06-29', total: 2 },
+		{ date: '2026-06-30', total: 3 },
+		{ date: '2026-07-01', total: 4 }
+	];
+	expect(sampleDailyCounts(days, 'month')).toEqual([
+		{ date: '2026-06-30', total: 3 },
+		{ date: '2026-07-01', total: 4 }
+	]);
+	expect(sampleDailyCounts(days, 'day')).toEqual(days);
 });

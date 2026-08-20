@@ -5,7 +5,7 @@
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
-	import { calculateFlows, type FlowBucket } from '$lib/data/metrics.js';
+	import { calculateFlows, sampleDailyCounts, type FlowBucket } from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -215,6 +215,7 @@
 	let flows = $derived(
 		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
 	);
+	let displayCounts = $derived(sampleDailyCounts(dailyCounts, flowBucket));
 
 	$effect(() => {
 		// Recompute the active preset's range when timezone changes
@@ -604,23 +605,21 @@
 					</Select.Content>
 				</Select.Root>
 
-				{#if chartMode === 'flow'}
-					<Select.Root
-						type="single"
-						value={flowBucket}
-						onValueChange={(v) => (flowBucket = v as FlowBucket)}
-					>
-						<Select.Trigger class={TRIGGER_CLASS} title="Flow bucket">
-							{@render controlIcon(ICONS.bucket)}
-							<span>{FLOW_BUCKETS.find((b) => b.value === flowBucket)?.label}</span>
-						</Select.Trigger>
-						<Select.Content class={CONTENT_CLASS}>
-							{#each FLOW_BUCKETS as b}
-								<Select.Item value={b.value} label={b.label} />
-							{/each}
-						</Select.Content>
-					</Select.Root>
-				{/if}
+				<Select.Root
+					type="single"
+					value={flowBucket}
+					onValueChange={(v) => (flowBucket = v as FlowBucket)}
+				>
+					<Select.Trigger class={TRIGGER_CLASS} title="Time bucket">
+						{@render controlIcon(ICONS.bucket)}
+						<span>{FLOW_BUCKETS.find((b) => b.value === flowBucket)?.label}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
+						{#each FLOW_BUCKETS as b}
+							<Select.Item value={b.value} label={b.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 
 				<Select.Root type="single" bind:value={timezone}>
 					<Select.Trigger class={TRIGGER_CLASS} title="Timezone">
@@ -744,8 +743,9 @@
 					/>
 				{:else}
 					<TaskChart
-						{dailyCounts}
+						dailyCounts={displayCounts}
 						{categories}
+						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
 						tagColors={chartColors}
 						{hiddenByDefault}
