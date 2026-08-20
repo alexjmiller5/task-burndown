@@ -215,7 +215,14 @@
 	let flows = $derived(
 		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
 	);
-	let displayCounts = $derived(sampleDailyCounts(dailyCounts, flowBucket));
+	// Sample the visible window so the current partial week/month keeps a bar
+	// (sampling the full series would date it beyond the range and lose it).
+	let displayCounts = $derived(
+		sampleDailyCounts(
+			dailyCounts.filter((d) => d.date >= dateStart && d.date <= dateEnd),
+			flowBucket
+		)
+	);
 
 	$effect(() => {
 		// Recompute the active preset's range when timezone changes
@@ -739,6 +746,7 @@
 						bucket={flowBucket}
 						{categories}
 						colorMap={chartColors}
+						dateRange={{ start: dateStart, end: dateEnd }}
 						{hiddenByDefault}
 					/>
 				{:else}

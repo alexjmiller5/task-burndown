@@ -32,6 +32,45 @@
 		isMobile = 'matches' in e ? e.matches : false;
 	}
 
+	// Day/week keep the continuous time axis; month labels each bar (like Flow).
+	function xAxis(range: { start: string; end: string }) {
+		const common = {
+			stacked: true,
+			grid: { color: 'rgba(30, 41, 59, 0.4)', lineWidth: 0.5 },
+			ticks: {
+				color: '#94A3B8',
+				font: { family: 'JetBrains Mono', size: 10 },
+				maxRotation: 0
+			},
+			border: { color: 'rgba(30, 41, 59, 0.6)' }
+		};
+		if (bucket === 'month') {
+			return {
+				...common,
+				type: 'category' as const,
+				grid: { display: false },
+				ticks: {
+					...common.ticks,
+					autoSkip: true,
+					maxTicksLimit: isMobile ? 6 : 12,
+					callback: function (this: any, value: number) {
+						return dayjs(this.getLabelForValue(value)).format('MMM YYYY');
+					}
+				}
+			};
+		}
+		return {
+			...common,
+			type: 'time' as const,
+			time: {
+				unit: 'week' as const,
+				displayFormats: { day: 'MMM D', week: 'MMM D', month: 'MMM YYYY' }
+			},
+			min: range.start,
+			max: range.end
+		};
+	}
+
 	function buildConfig(counts: DayCount[], cats: string[], range: { start: string; end: string }) {
 		// Filter to visible range so bars don't extend past the axis
 		const visible = counts.filter((d) => d.date >= range.start && d.date <= range.end);
@@ -94,6 +133,13 @@
 						padding: 12,
 						cornerRadius: 8,
 						callbacks: {
+							title: (items: any[]) => {
+								if (!items[0]) return '';
+								const d = bucket === 'month' ? dayjs(items[0].label) : dayjs(items[0].parsed.x);
+								if (bucket === 'month') return d.format('MMM YYYY');
+								if (bucket === 'week') return `Week ending ${d.format('MMM D')}`;
+								return d.format('MMM D, YYYY');
+							},
 							footer: (items: any[]) => {
 								const total = items.reduce((sum: number, item: any) => sum + (item.raw || 0), 0);
 								return `Total: ${total}`;
@@ -103,28 +149,7 @@
 					}
 				},
 				scales: {
-					x: {
-						type: 'time' as const,
-						time: {
-							unit: 'week' as const,
-							tooltipFormat: 'YYYY-MM-DD',
-							displayFormats: {
-								day: 'MMM D',
-								week: 'MMM D',
-								month: 'MMM YYYY'
-							}
-						},
-						min: range.start,
-						max: range.end,
-						stacked: true,
-						grid: { color: 'rgba(30, 41, 59, 0.4)', lineWidth: 0.5 },
-						ticks: {
-							color: '#94A3B8',
-							font: { family: 'JetBrains Mono', size: 10 },
-							maxRotation: 0
-						},
-						border: { color: 'rgba(30, 41, 59, 0.6)' }
-					},
+					x: xAxis(range),
 					y: {
 						stacked: true,
 						beginAtZero: true,

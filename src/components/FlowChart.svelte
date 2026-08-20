@@ -9,10 +9,11 @@
 		bucket: FlowBucket;
 		categories: string[];
 		colorMap: Record<string, string>;
+		dateRange: { start: string; end: string };
 		hiddenByDefault?: string[];
 	}
 
-	let { flows, bucket, categories, colorMap, hiddenByDefault = [] }: Props = $props();
+	let { flows, bucket, categories, colorMap, dateRange, hiddenByDefault = [] }: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let chart: any = null;
@@ -23,15 +24,50 @@
 		isMobile = 'matches' in e ? e.matches : false;
 	}
 
-	function formatLabel(label: string): string {
-		if (bucket === 'month') return dayjs(`${label}-01`).format('MMM YYYY');
-		return dayjs(label).format('MMM D');
+	function formatTitle(dateish: string | number): string {
+		if (bucket === 'month') return dayjs(`${dateish}-01`).format('MMM YYYY');
+		if (bucket === 'week') return `Week of ${dayjs(dateish).format('MMM D')}`;
+		return dayjs(dateish).format('MMM D, YYYY');
 	}
 
-	function formatTitle(label: string): string {
-		if (bucket === 'month') return formatLabel(label);
-		if (bucket === 'week') return `Week of ${dayjs(label).format('MMM D')}`;
-		return dayjs(label).format('MMM D, YYYY');
+	// Day/week share the Active view's continuous time axis; month labels each bar.
+	function xAxis() {
+		const common = {
+			stacked: true,
+			grid: { color: 'rgba(30, 41, 59, 0.4)', lineWidth: 0.5 },
+			ticks: {
+				color: '#94A3B8',
+				font: { family: 'JetBrains Mono', size: 10 },
+				maxRotation: 0
+			},
+			border: { color: 'rgba(30, 41, 59, 0.6)' }
+		};
+		if (bucket === 'month') {
+			return {
+				...common,
+				type: 'category' as const,
+				grid: { display: false },
+				ticks: {
+					...common.ticks,
+					autoSkip: true,
+					maxTicksLimit: isMobile ? 6 : 12,
+					callback: function (this: any, value: number) {
+						return dayjs(`${this.getLabelForValue(value)}-01`).format('MMM YYYY');
+					}
+				}
+			};
+		}
+		return {
+			...common,
+			type: 'time' as const,
+			time: {
+				unit: 'week' as const,
+				displayFormats: { day: 'MMM D', week: 'MMM D', month: 'MMM YYYY' }
+			},
+			min: dateRange.start,
+			max: dateRange.end,
+			offset: true
+		};
 	}
 
 	function buildConfig() {
@@ -113,21 +149,7 @@
 					}
 				},
 				scales: {
-					x: {
-						stacked: true,
-						grid: { display: false },
-						ticks: {
-							color: '#94A3B8',
-							font: { family: 'JetBrains Mono', size: 10 },
-							maxRotation: 0,
-							autoSkip: true,
-							maxTicksLimit: isMobile ? 6 : 12,
-							callback: function (this: any, value: number) {
-								return formatLabel(this.getLabelForValue(value));
-							}
-						},
-						border: { color: 'rgba(30, 41, 59, 0.6)' }
-					},
+					x: xAxis(),
 					y: {
 						stacked: true,
 						grid: { color: 'rgba(30, 41, 59, 0.3)', lineWidth: 0.5 },
