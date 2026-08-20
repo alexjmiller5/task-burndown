@@ -26,7 +26,7 @@ Requirements: Bun, 1Password CLI (`op`), wrangler (via Bun).
 - **Vite** config only (`vite.config.ts`); no `svelte.config.js`
 - **Chart.js** for chart rendering (loaded client-side via dynamic import)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin
-- **shadcn-svelte** (Bits UI) for interactive controls — owned components under `src/lib/components/ui/` (`select`, `button`, `separator`), config in `components.json`, `cn()` in `src/lib/utils.ts`. Tokens are mapped to the app palette inside `app.css`'s `@theme`; `--color-muted` stays the legacy TEXT color, so the ui components' `bg-muted` surfaces are patched to `bg-secondary`. Dark-only: `class="dark"` on `<html>` + `@custom-variant dark`. A global rule gives all non-disabled buttons `cursor: pointer`. Component-internal Lucide icons stay as-is (icons skill); control triggers use inline heroicons
+- **shadcn-svelte** (Bits UI) for interactive controls — owned components under `src/lib/components/ui/` (`select`, `button`, `separator`), config in `components.json`, `cn()` in `src/lib/utils.ts`. Tokens are mapped to the app palette inside `app.css`'s `@theme`; `--color-muted` stays the legacy TEXT color, so the ui components' `bg-muted` surfaces are patched to `bg-secondary`. Dark-only: `class="dark"` on `<html>` + `@custom-variant dark`. A global rule gives all non-disabled buttons `cursor: pointer`; `tw-animate-css` provides the components' open/close animations. Select popovers min-width-match their trigger (`--bits-select-anchor-width`). Component-internal Lucide icons stay as-is (icons skill); control triggers use inline heroicons
 - **dayjs** for date manipulation in `src/lib/data/filters.ts` and `src/lib/data/history.ts`. All other date math is in `src/lib/data/timezone.ts` using `Intl.DateTimeFormat` for IANA timezone conversion (no dayjs plugins needed).
 
 ### Cache — R2
@@ -81,7 +81,6 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 - `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp)
 - `FlowChart.svelte` — created-up/completed-down mirrored bars for the main chart's Flow mode, stacked by the active group-by; legend entries toggle both directions of a category
-- `AgeChart.svelte` — the companion panel below the main chart (desktop-only): avg open age, p90 open age, rolling age-at-completion lines
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
@@ -112,7 +111,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 100 tests as of the metrics-panel work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 93 tests as of the flow-mode work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 
@@ -127,8 +126,6 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 **DST safety**: `addDays` in `timezone.ts` uses `Date.UTC` + `setUTCDate` so calendar-day arithmetic never lands on the wrong day across DST transitions, regardless of host TZ.
 
 **History ledger**: Tasks have a "Tag & Date History" rich text field that records tag/due date changes over time. This enables historical accuracy — the chart shows what tags a task had on any given past date.
-
-**Age metrics**: the metrics panel's open pool runs from created day to completed day (created-anchored, unlike the chart's due-date effective start). Avg age (not median — a burst of new tasks makes the median saw-tooth) plus p90 age (the oldest-decile line, robust to new-task bursts). Tasks with a terminal status but no completed date (pre-2025 legacy) are excluded from the pool rather than polluting it forever; completed-before-created ages clamp to 0.
 
 **View filters**: Base filters (cancelled, useless) apply client-side via `applyBaseFilters` after loading the cache. Toggle filters (legacy cutoff 2025-01-10, incomplete tasks, project tasks) apply client-side for instant response.
 

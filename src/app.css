@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
 /* Components ship dark: classes; app is dark-only via class="dark" on <html> */
 @custom-variant dark (&:is(.dark *));

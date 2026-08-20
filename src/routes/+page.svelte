@@ -5,7 +5,7 @@
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
-	import { calculateDailyMetrics, calculateFlows, type FlowBucket } from '$lib/data/metrics.js';
+	import { calculateFlows, type FlowBucket } from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -14,7 +14,6 @@
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
 	import FlowChart from '../components/FlowChart.svelte';
-	import AgeChart from '../components/AgeChart.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import RangeSlider from '../components/RangeSlider.svelte';
@@ -213,7 +212,6 @@
 		}
 	});
 
-	let dailyMetrics = $derived(calculateDailyMetrics(filteredTasks, timezone, minDate, SLIDER_MAX));
 	let flows = $derived(
 		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
 	);
@@ -756,15 +754,4 @@
 			</div>
 		{/if}
 	</div>
-
-	<!-- Age panel — avg/p90 open age + age-at-completion. Desktop only:
-	     the mobile layout is locked to one viewport for the main chart. -->
-	{#if baseTasks.length > 0}
-		<div
-			class="hidden sm:block order-4 rounded-card border border-border-default bg-surface p-6 h-[340px]"
-			style="box-shadow: 0 0 60px -20px var(--color-bitcoin-glow-soft);"
-		>
-			<AgeChart metrics={dailyMetrics} dateRange={{ start: dateStart, end: dateEnd }} />
-		</div>
-	{/if}
 </div>
