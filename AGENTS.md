@@ -26,6 +26,7 @@ Requirements: Bun, 1Password CLI (`op`), wrangler (via Bun).
 - **Vite** config only (`vite.config.ts`); no `svelte.config.js`
 - **Chart.js** for chart rendering (loaded client-side via dynamic import)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin
+- **shadcn-svelte** (Bits UI) for interactive controls — owned components under `src/lib/components/ui/` (`select`, `button`, `separator`), config in `components.json`, `cn()` in `src/lib/utils.ts`. Tokens are mapped to the app palette inside `app.css`'s `@theme`; `--color-muted` stays the legacy TEXT color, so the ui components' `bg-muted` surfaces are patched to `bg-secondary`. Dark-only: `class="dark"` on `<html>` + `@custom-variant dark`. A global rule gives all non-disabled buttons `cursor: pointer`. Component-internal Lucide icons stay as-is (icons skill); control triggers use inline heroicons
 - **dayjs** for date manipulation in `src/lib/data/filters.ts` and `src/lib/data/history.ts`. All other date math is in `src/lib/data/timezone.ts` using `Intl.DateTimeFormat` for IANA timezone conversion (no dayjs plugins needed).
 
 ### Cache — R2
@@ -84,7 +85,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
 
-UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components. Every selector is an icon+select dropdown in the timezone-control style, identical on all viewports: range preset, group-by, Active/Flow chart mode, flow bucket (Day/Week/Month, flow mode only), timezone, plus the Legacy/Projects filter chips — all on the left; the right side holds only the Edits and Sync buttons. The chart mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
+UI controls are inlined in `src/routes/+page.svelte` rather than extracted into components. Every selector is a shadcn Select (icon + mono-uppercase trigger, dark popover), identical on all viewports: range preset, group-by, Active/Flow chart mode, flow bucket (Day/Week/Month, flow mode only), timezone, plus the Legacy/Projects filter chips — all on the left; the right side holds only the Edits and Sync buttons. The chart mode is persisted with the other prefs and deep-linkable via `#flow`. Priority legend/tooltip order follows `PRIORITY_ORDER` (High → Low), not alphabetical. The header shows only a "Sync failed" indicator on error — no live/syncing badge.
 
 ## Secrets
 

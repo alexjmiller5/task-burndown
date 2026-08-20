@@ -15,6 +15,8 @@
 	import TaskChart from '../components/TaskChart.svelte';
 	import FlowChart from '../components/FlowChart.svelte';
 	import AgeChart from '../components/AgeChart.svelte';
+	import * as Select from '$lib/components/ui/select/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
 	import RangeSlider from '../components/RangeSlider.svelte';
 
 	const DEFAULT_TAGS = [
@@ -73,6 +75,28 @@
 		{ value: 'week', label: 'Week' },
 		{ value: 'month', label: 'Month' }
 	];
+
+	// Heroicon path data for the control triggers (icons skill: mono UI icons)
+	const ICONS = {
+		range:
+			'M6.75 2.994v2.25m10.5-2.25v2.25m-14.252 13.5V7.491a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v11.251m-18 0a2.25 2.25 0 0 0 2.25 2.25h13.5a2.25 2.25 0 0 0 2.25-2.25m-18 0v-7.5a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v7.5m-6.75-6h2.25m-9 2.25h4.5m.002-2.25h.005v.006H12v-.006Zm-.001 4.5h.006v.006h-.006v-.005Zm-2.25.001h.005v.006H9.75v-.006Zm-2.25 0h.005v.005h-.006v-.005Zm6.75-2.247h.005v.005h-.005v-.005Zm0 2.247h.006v.006h-.006v-.006Zm2.25-2.248h.006V15H16.5v-.005Z',
+		group:
+			'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
+		mode: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z',
+		bucket:
+			'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z',
+		tz: 'M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418',
+		edits: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+		sync: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'
+	};
+
+	// Shared styling: shadcn triggers/buttons dressed in the app's control language
+	const TRIGGER_CLASS =
+		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase hover:border-border-strong dark:bg-transparent dark:hover:bg-secondary/40';
+	const CONTENT_CLASS = 'font-[var(--font-mono)] text-xs tracking-wider uppercase';
+	const ACTION_BTN_CLASS =
+		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase hover:border-bitcoin/40 hover:text-muted dark:bg-transparent dark:border-border-default dark:hover:bg-bitcoin/5';
+	const CHIP_BTN_CLASS = 'h-auto gap-2 rounded-control px-3 py-2 dark:bg-transparent';
 
 	let prefsLoaded = $state(false);
 
@@ -193,13 +217,6 @@
 	let flows = $derived(
 		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
 	);
-
-	function selectPreset(label: string) {
-		activePreset = label;
-		const range = getPresetRange(label as PresetLabel, timezone);
-		dateStart = range.start;
-		dateEnd = range.end;
-	}
 
 	$effect(() => {
 		// Recompute the active preset's range when timezone changes
@@ -441,6 +458,20 @@
 	});
 </script>
 
+{#snippet controlIcon(d: string, cls: string = '')}
+	<svg
+		class="w-4 h-4 text-muted {cls}"
+		xmlns="http://www.w3.org/2000/svg"
+		fill="none"
+		viewBox="0 0 24 24"
+		stroke-width="1.5"
+		stroke="currentColor"
+		aria-hidden="true"
+	>
+		<path stroke-linecap="round" stroke-linejoin="round" {d} />
+	</svg>
+{/snippet}
+
 <!-- Background grid pattern -->
 <div class="fixed inset-0 bg-grid pointer-events-none"></div>
 
@@ -533,178 +564,90 @@
 		<div
 			class="order-3 sm:order-1 flex flex-col gap-2 mt-3 sm:mt-0 sm:mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
 		>
-			<!-- Row 1 (mobile) / Left half (desktop): view-shape controls -->
+			<!-- Left: everything except the sync actions -->
 			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
-				<!-- Range preset dropdown -->
-				<label
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
-					title="Date range"
-				>
-					<svg
-						class="w-4 h-4 text-muted"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M6.75 2.994v2.25m10.5-2.25v2.25m-14.252 13.5V7.491a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v11.251m-18 0a2.25 2.25 0 0 0 2.25 2.25h13.5a2.25 2.25 0 0 0 2.25-2.25m-18 0v-7.5a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v7.5m-6.75-6h2.25m-9 2.25h4.5m.002-2.25h.005v.006H12v-.006Zm-.001 4.5h.006v.006h-.006v-.005Zm-2.25.001h.005v.006H9.75v-.006Zm-2.25 0h.005v.005h-.006v-.005Zm6.75-2.247h.005v.005h-.005v-.005Zm0 2.247h.006v.006h-.006v-.006Zm2.25-2.248h.006V15H16.5v-.005Z"
-						/>
-					</svg>
-					<select
-						bind:value={activePreset}
-						class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
-					>
-						{#if activePreset === ''}
-							<option value="" class="bg-surface text-white normal-case">Custom range</option>
-						{/if}
+				<Select.Root type="single" bind:value={activePreset}>
+					<Select.Trigger class={TRIGGER_CLASS} title="Date range">
+						{@render controlIcon(ICONS.range)}
+						<span>{activePreset === '' ? 'Custom' : activePreset}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
 						{#each PRESET_LABELS as label}
-							<option value={label} class="bg-surface text-white normal-case">{label}</option>
+							<Select.Item value={label} {label} />
 						{/each}
-					</select>
-				</label>
+					</Select.Content>
+				</Select.Root>
 
-				<!-- Group by dropdown -->
-				<label
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
-					title="Group by"
-				>
-					<svg
-						class="w-4 h-4 text-muted"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
-						/>
-					</svg>
-					<select
-						bind:value={groupBy}
-						class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
-					>
+				<Select.Root type="single" value={groupBy} onValueChange={(v) => (groupBy = v as GroupBy)}>
+					<Select.Trigger class={TRIGGER_CLASS} title="Group by">
+						{@render controlIcon(ICONS.group)}
+						<span>{GROUP_BY_OPTIONS.find((o) => o.value === groupBy)?.label}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
 						{#each GROUP_BY_OPTIONS as option}
-							<option value={option.value} class="bg-surface text-white normal-case"
-								>{option.label}</option
-							>
+							<Select.Item value={option.value} label={option.label} />
 						{/each}
-					</select>
-				</label>
+					</Select.Content>
+				</Select.Root>
 
-				<!-- Chart mode: active backlog vs created/completed flow -->
-				<label
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
-					title="Chart mode"
+				<Select.Root
+					type="single"
+					value={chartMode}
+					onValueChange={(v) => (chartMode = v as ChartMode)}
 				>
-					<svg
-						class="w-4 h-4 text-muted"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
-						/>
-					</svg>
-					<select
-						bind:value={chartMode}
-						class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
-					>
+					<Select.Trigger class={TRIGGER_CLASS} title="Chart mode">
+						{@render controlIcon(ICONS.mode)}
+						<span>{CHART_MODES.find((m) => m.value === chartMode)?.label}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
 						{#each CHART_MODES as mode}
-							<option value={mode.value} class="bg-surface text-white normal-case"
-								>{mode.label}</option
-							>
+							<Select.Item value={mode.value} label={mode.label} />
 						{/each}
-					</select>
-				</label>
+					</Select.Content>
+				</Select.Root>
 
-				<!-- Flow bucket (only in flow mode) -->
 				{#if chartMode === 'flow'}
-					<label
-						class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
-						title="Flow bucket"
+					<Select.Root
+						type="single"
+						value={flowBucket}
+						onValueChange={(v) => (flowBucket = v as FlowBucket)}
 					>
-						<svg
-							class="w-4 h-4 text-muted"
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke-width="1.5"
-							stroke="currentColor"
-							aria-hidden="true"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z"
-							/>
-						</svg>
-						<select
-							bind:value={flowBucket}
-							class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
-						>
+						<Select.Trigger class={TRIGGER_CLASS} title="Flow bucket">
+							{@render controlIcon(ICONS.bucket)}
+							<span>{FLOW_BUCKETS.find((b) => b.value === flowBucket)?.label}</span>
+						</Select.Trigger>
+						<Select.Content class={CONTENT_CLASS}>
 							{#each FLOW_BUCKETS as b}
-								<option value={b.value} class="bg-surface text-white normal-case">{b.label}</option>
+								<Select.Item value={b.value} label={b.label} />
 							{/each}
-						</select>
-					</label>
+						</Select.Content>
+					</Select.Root>
 				{/if}
 
-				<!-- Timezone selector -->
-				<label
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default bg-transparent hover:border-border-strong transition-colors duration-150 cursor-pointer"
-					title="Timezone"
-				>
-					<svg
-						class="w-4 h-4 text-muted"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418"
-						/>
-					</svg>
-					<select
-						bind:value={timezone}
-						class="bg-transparent text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted focus:outline-none cursor-pointer"
-					>
+				<Select.Root type="single" bind:value={timezone}>
+					<Select.Trigger class={TRIGGER_CLASS} title="Timezone">
+						{@render controlIcon(ICONS.tz)}
+						<span>{TIMEZONES.find((t) => t.id === timezone)?.label}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
 						{#each TIMEZONES as tz}
-							<option value={tz.id} class="bg-surface text-white normal-case">{tz.label}</option>
+							<Select.Item value={tz.id} label={tz.label} />
 						{/each}
-					</select>
-				</label>
+					</Select.Content>
+				</Select.Root>
 
 				{#if groupBy === 'tag'}
-					<button
+					<Button
+						variant="outline"
 						onclick={() => (showLegacyTags = !showLegacyTags)}
-						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
+						class={CHIP_BTN_CLASS}
 						style={showLegacyTags
 							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
 							: 'border-color: var(--color-border-default); background: transparent;'}
 						title="Include legacy tags"
 					>
 						<div
-							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
+							class="size-1.5 rounded-full transition-colors duration-150"
 							style="background: {showLegacyTags
 								? 'var(--color-bitcoin)'
 								: 'var(--color-border-strong)'};"
@@ -714,20 +657,21 @@
 							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
 							>Legacy</span
 						>
-					</button>
+					</Button>
 				{/if}
 
 				{#if groupBy !== 'project'}
-					<button
+					<Button
+						variant="outline"
 						onclick={() => (includeProjectTasks = !includeProjectTasks)}
-						class="flex items-center gap-2 px-3 py-2 rounded-control border transition-all duration-150"
+						class={CHIP_BTN_CLASS}
 						style={includeProjectTasks
 							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
 							: 'border-color: var(--color-border-default); background: transparent;'}
 						title="Include project tasks"
 					>
 						<div
-							class="w-1.5 h-1.5 rounded-full transition-colors duration-150"
+							class="size-1.5 rounded-full transition-colors duration-150"
 							style="background: {includeProjectTasks
 								? 'var(--color-bitcoin)'
 								: 'var(--color-border-strong)'};"
@@ -737,65 +681,33 @@
 							style="color: {includeProjectTasks ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
 							>Projects</span
 						>
-					</button>
+					</Button>
 				{/if}
 			</div>
 
 			<!-- Right side: sync actions only -->
 			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
-				<!-- Refresh edits button -->
-				<button
+				<Button
+					variant="outline"
 					onclick={refreshEdits}
 					disabled={isRefreshingToday || isFullSyncing}
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default hover:border-bitcoin/40 hover:bg-bitcoin/5 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+					class={ACTION_BTN_CLASS}
 					title="Fetch all tasks edited since the last sync"
 				>
-					<svg
-						class="w-4 h-4 text-muted {isRefreshingToday ? 'animate-spin' : ''}"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-						/>
-					</svg>
-					<span class="text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted">
-						{isRefreshingToday ? 'Syncing' : 'Edits'}
-					</span>
-				</button>
+					{@render controlIcon(ICONS.edits, isRefreshingToday ? 'animate-spin' : '')}
+					<span>{isRefreshingToday ? 'Syncing' : 'Edits'}</span>
+				</Button>
 
-				<!-- Sync button: edits + deletion sweep -->
-				<button
+				<Button
+					variant="outline"
 					onclick={pruneSync}
 					disabled={isFullSyncing || isRefreshingToday}
-					class="flex items-center gap-2 px-3 py-2 rounded-control border border-border-default hover:border-bitcoin/40 hover:bg-bitcoin/5 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+					class={ACTION_BTN_CLASS}
 					title="Fetch edits and remove deleted tasks (id sweep, no full re-fetch)"
 				>
-					<svg
-						class="w-4 h-4 text-muted {isFullSyncing ? 'animate-spin' : ''}"
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						aria-hidden="true"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-						/>
-					</svg>
-					<span class="text-xs font-[var(--font-mono)] uppercase tracking-wider text-muted">
-						{isFullSyncing ? `Sync ${syncProgress}` : 'Sync'}
-					</span>
-				</button>
+					{@render controlIcon(ICONS.sync, isFullSyncing ? 'animate-spin' : '')}
+					<span>{isFullSyncing ? `Sync ${syncProgress}` : 'Sync'}</span>
+				</Button>
 			</div>
 		</div>
 
