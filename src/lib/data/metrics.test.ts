@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { calculateFlows, sampleDailyCounts } from './metrics.ts';
+import { avgDueToCompletion, calculateFlows, rollingAvgTotals, sampleDailyCounts } from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -116,4 +116,27 @@ test('sampleDailyCounts month buckets and day passthrough', () => {
 		{ date: '2026-07-01', total: 4 }
 	]);
 	expect(sampleDailyCounts(days, 'day')).toEqual(days);
+});
+
+test('rollingAvgTotals is the trailing 14-day mean of totals', () => {
+	const days = Array.from({ length: 20 }, (_, i) => ({
+		date: `2026-05-${String(i + 1).padStart(2, '0')}`,
+		total: i + 1
+	}));
+	const avg = rollingAvgTotals(days);
+	expect(avg['2026-05-01']).toEqual(1); // window of 1
+	expect(avg['2026-05-03']).toEqual(2); // mean of 1..3
+	expect(avg['2026-05-14']).toEqual(7.5); // mean of 1..14
+	expect(avg['2026-05-20']).toEqual(13.5); // mean of 7..20
+});
+
+test('avgDueToCompletion averages signed days from due date to completion', () => {
+	const tasks = [
+		makeTask({ id: 'late', dueDate: '2026-05-01', completed: '2026-05-04' }), // +3
+		makeTask({ id: 'early', dueDate: '2026-05-10', completed: '2026-05-08' }), // -2
+		makeTask({ id: 'no-due', completed: '2026-05-08' }),
+		makeTask({ id: 'open', dueDate: '2026-05-10' })
+	];
+	expect(avgDueToCompletion(tasks, 'UTC')).toEqual(0.5);
+	expect(avgDueToCompletion([makeTask()], 'UTC')).toBeNull();
 });

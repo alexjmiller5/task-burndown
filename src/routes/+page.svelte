@@ -5,7 +5,13 @@
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
-	import { calculateFlows, sampleDailyCounts, type FlowBucket } from '$lib/data/metrics.js';
+	import {
+		avgDueToCompletion,
+		calculateFlows,
+		rollingAvgTotals,
+		sampleDailyCounts,
+		type FlowBucket
+	} from '$lib/data/metrics.js';
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
@@ -60,6 +66,7 @@
 	let dateStart: string = $state(initial90D.start);
 	let dateEnd: string = $state(initial90D.end);
 	let includeProjectTasks: boolean = $state(true);
+	let includeCanceled: boolean = $state(false);
 	let showLegacyTags: boolean = $state(false);
 	let groupBy: GroupBy = $state('tag');
 	let chartMode: ChartMode = $state('active');
@@ -108,7 +115,7 @@
 		return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 	});
 
-	let baseTasks = $derived(applyBaseFilters(allTasks));
+	let baseTasks = $derived(applyBaseFilters(allTasks, includeCanceled));
 
 	let isFullSyncing: boolean = $state(false);
 	let isRefreshingToday: boolean = $state(false);
@@ -217,6 +224,18 @@
 	);
 	// Sample the visible window so the current partial week/month keeps a bar
 	// (sampling the full series would date it beyond the range and lose it).
+	let avgTotals = $derived(rollingAvgTotals(dailyCounts));
+	let avgDueToDone = $derived(avgDueToCompletion(filteredTasks, timezone));
+	let cancelRate = $derived.by(() => {
+		let canceled = 0;
+		let completed = 0;
+		for (const t of allTasks) {
+			if (t.status === 'Canceled' || t.status === 'Cancelled') canceled++;
+			else if (t.status === 'Completed') completed++;
+		}
+		const total = canceled + completed;
+		return total === 0 ? null : (100 * canceled) / total;
+	});
 	let displayCounts = $derived(
 		sampleDailyCounts(
 			dailyCounts.filter((d) => d.date >= dateStart && d.date <= dateEnd),
@@ -243,6 +262,7 @@
 		const end = dateEnd;
 		const legacy = showLegacyTags;
 		const projects = includeProjectTasks;
+		const canceled = includeCanceled;
 		const grp = groupBy;
 		const mode = chartMode;
 		if (!prefsLoaded) return;
@@ -253,6 +273,7 @@
 			chartMode: mode,
 			showLegacyTags: legacy,
 			includeProjectTasks: projects,
+			includeCanceled: canceled,
 			preset: (PRESET_LABELS as readonly string[]).includes(preset)
 				? (preset as PresetLabel)
 				: null,
@@ -442,6 +463,7 @@
 			chartMode = stored.chartMode ?? 'active';
 			showLegacyTags = stored.showLegacyTags;
 			includeProjectTasks = stored.includeProjectTasks;
+			includeCanceled = stored.includeCanceled ?? false;
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
 				const range = getPresetRange(stored.preset, stored.timezone);
@@ -558,6 +580,30 @@
 					>with projects</span
 				>
 			</div>
+			{#if avgDueToDone !== null}
+				<div class="hidden sm:block w-px h-6 bg-border-default"></div>
+				<div>
+					<span
+						class="font-[var(--font-mono)] text-xl sm:text-2xl md:text-3xl font-medium text-white"
+						>{avgDueToDone >= 0 ? '+' : ''}{avgDueToDone.toFixed(1)}d</span
+					>
+					<span class="text-muted text-xs font-[var(--font-mono)] uppercase tracking-wider ml-2"
+						>due → done</span
+					>
+				</div>
+			{/if}
+			{#if cancelRate !== null}
+				<div class="hidden sm:block w-px h-6 bg-border-default"></div>
+				<div>
+					<span
+						class="font-[var(--font-mono)] text-xl sm:text-2xl md:text-3xl font-medium text-white"
+						>{cancelRate.toFixed(0)}%</span
+					>
+					<span class="text-muted text-xs font-[var(--font-mono)] uppercase tracking-wider ml-2"
+						>canceled</span
+					>
+				</div>
+			{/if}
 		</section>
 	{/if}
 
@@ -687,6 +733,28 @@
 						>
 					</Button>
 				{/if}
+
+				<Button
+					variant="outline"
+					onclick={() => (includeCanceled = !includeCanceled)}
+					class={CHIP_BTN_CLASS}
+					style={includeCanceled
+						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
+						: 'border-color: var(--color-border-default); background: transparent;'}
+					title="Include canceled tasks"
+				>
+					<div
+						class="size-1.5 rounded-full transition-colors duration-150"
+						style="background: {includeCanceled
+							? 'var(--color-bitcoin)'
+							: 'var(--color-border-strong)'};"
+					></div>
+					<span
+						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
+						style="color: {includeCanceled ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
+						>Canceled</span
+					>
+				</Button>
 			</div>
 
 			<!-- Right side: sync actions only -->
@@ -757,6 +825,7 @@
 						dateRange={{ start: dateStart, end: dateEnd }}
 						tagColors={chartColors}
 						{hiddenByDefault}
+						averages={avgTotals}
 					/>
 				{/if}
 			</div>

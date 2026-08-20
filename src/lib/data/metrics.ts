@@ -1,6 +1,6 @@
 import type { DayCount, GroupBy, Task } from '$lib/types.js';
 import { getGroupKeys } from './calculator.ts';
-import { addDays, toLocalDateStr } from './timezone.ts';
+import { addDays, diffDays, toLocalDateStr } from './timezone.ts';
 
 export type FlowBucket = 'day' | 'week' | 'month';
 
@@ -75,4 +75,28 @@ export function sampleDailyCounts(days: DayCount[], bucket: FlowBucket): DayCoun
 		lastPerBucket.set(bucketLabel(d.date, bucket), d);
 	}
 	return Array.from(lastPerBucket.values());
+}
+
+/** Trailing `window`-day mean of the daily totals, keyed by date. */
+export function rollingAvgTotals(days: DayCount[], window = 14): Record<string, number> {
+	const out: Record<string, number> = {};
+	let sum = 0;
+	for (let i = 0; i < days.length; i++) {
+		sum += days[i].total as number;
+		if (i >= window) sum -= days[i - window].total as number;
+		out[days[i].date] = sum / Math.min(i + 1, window);
+	}
+	return out;
+}
+
+/** Mean signed days from due date to completion across finished tasks; null if none. */
+export function avgDueToCompletion(tasks: Task[], tz: string): number | null {
+	let sum = 0;
+	let n = 0;
+	for (const t of tasks) {
+		if (!t.dueDate || !t.completed) continue;
+		sum += diffDays(toLocalDateStr(t.dueDate, tz), toLocalDateStr(t.completed, tz));
+		n++;
+	}
+	return n === 0 ? null : sum / n;
 }
