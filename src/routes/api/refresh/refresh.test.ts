@@ -31,6 +31,8 @@ const task = {
 	tags: [],
 	priority: '(No Priority)',
 	projectName: '(No Project)',
+	aiReady: false,
+	aiCompleted: false,
 	hasProject: false,
 	lastEditedTime: '2026-07-02T00:00:00.000Z'
 };

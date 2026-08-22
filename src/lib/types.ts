@@ -17,12 +17,14 @@ export interface Task {
 	tags: string[];
 	priority: string;
 	projectName: string;
+	aiReady: boolean;
+	aiCompleted: boolean;
 	hasProject: boolean;
 	lastEditedTime: string;
 }
 
 export type DueDateCategory = 'Future' | 'Overdue' | 'Undated';
-export type GroupBy = 'tag' | 'priority' | 'project' | 'age';
+export type GroupBy = 'tag' | 'priority' | 'project' | 'age' | 'ai';
 export type ChartMode = 'active' | 'flow';
 
 export interface DayCount {
