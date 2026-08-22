@@ -51,6 +51,8 @@ function parseTask(page: NotionPage): Task {
 		tags: tagObjects.map((t) => t.name),
 		priority,
 		projectName,
+		aiReady: props['AI Ready']?.checkbox ?? false,
+		aiCompleted: props['AI Completed']?.checkbox ?? false,
 		hasProject: projectName !== '(No Project)',
 		lastEditedTime: page.last_edited_time
 	};

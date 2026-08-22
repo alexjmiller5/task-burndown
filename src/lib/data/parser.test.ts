@@ -36,3 +36,18 @@ test('parseTasks no longer applies base filters (cancelled tasks stay)', () => {
 	const { tasks } = parseTasks([makePage(), cancelled]);
 	expect(tasks.length).toEqual(2);
 });
+
+test('parseTasks extracts the AI Ready and AI Completed checkboxes', () => {
+	const page = makePage({
+		properties: {
+			...makePage().properties,
+			'AI Ready': { checkbox: true },
+			'AI Completed': { checkbox: true }
+		}
+	});
+	const { tasks } = parseTasks([page, makePage({ id: 'p2' })]);
+	expect(tasks[0].aiReady).toEqual(true);
+	expect(tasks[0].aiCompleted).toEqual(true);
+	expect(tasks[1].aiReady).toEqual(false);
+	expect(tasks[1].aiCompleted).toEqual(false);
+});

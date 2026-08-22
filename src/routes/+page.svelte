@@ -4,7 +4,7 @@
 	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
-	import { AGE_BAND_ORDER } from '$lib/data/calculator.js';
+	import { AGE_BAND_ORDER, AI_ORDER } from '$lib/data/calculator.js';
 	import {
 		avgDueToCompletion,
 		calculateFlows,
@@ -41,7 +41,8 @@
 		{ value: 'tag', label: 'Tag' },
 		{ value: 'priority', label: 'Priority' },
 		{ value: 'project', label: 'Project' },
-		{ value: 'age', label: 'Age' }
+		{ value: 'age', label: 'Age' },
+		{ value: 'ai', label: 'AI' }
 	];
 
 	// Sequential heat ramp, young → old (warm → cold as tasks go stale);
@@ -52,6 +53,13 @@
 		'1-3m': '#E11D48',
 		'3-6m': '#A21CAF',
 		'6m+': '#6366F1'
+	};
+
+	// AI Completed = green (like Completed), AI Ready = blue (queued), Manual = slate.
+	const AI_COLORS: Record<string, string> = {
+		'AI Completed': '#22C55E',
+		'AI Ready': '#3B82F6',
+		Manual: '#64748B'
 	};
 
 	const SLIDER_MIN = '2025-01-10';
@@ -143,6 +151,8 @@
 				return allProjects;
 			case 'age':
 				return [...AGE_BAND_ORDER];
+			case 'ai':
+				return [...AI_ORDER];
 		}
 	});
 
@@ -158,6 +168,8 @@
 				return new Set(allProjects);
 			case 'age':
 				return new Set(AGE_BAND_ORDER);
+			case 'ai':
+				return new Set(AI_ORDER);
 		}
 	});
 
@@ -186,6 +198,8 @@
 				return PRIORITY_ORDER.filter((p) => selectedCategories.has(p));
 			case 'age':
 				return AGE_BAND_ORDER.filter((b) => selectedCategories.has(b));
+			case 'ai':
+				return AI_ORDER.filter((c) => selectedCategories.has(c));
 			default:
 				return [...selectedCategories].sort();
 		}
@@ -219,6 +233,8 @@
 				return {};
 			case 'age':
 				return AGE_BAND_COLORS;
+			case 'ai':
+				return AI_COLORS;
 		}
 	});
 

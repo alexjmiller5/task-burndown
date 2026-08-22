@@ -17,7 +17,7 @@ export interface StoredPreferences {
 	dateEnd?: string;
 }
 
-const VALID_GROUP_BY: ReadonlyArray<GroupBy> = ['tag', 'priority', 'project', 'age'];
+const VALID_GROUP_BY: ReadonlyArray<GroupBy> = ['tag', 'priority', 'project', 'age', 'ai'];
 
 function hasLocalStorage(): boolean {
 	try {

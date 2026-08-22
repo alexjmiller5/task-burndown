@@ -53,7 +53,7 @@ Pure TypeScript modules shared between server and client:
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
-- `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by; `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
+- `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by and `AI_ORDER` for the `ai` group-by (AI Completed / AI Ready / Manual from the Notion checkboxes); `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
 - `metrics.ts` — `calculateDailyMetrics` (per-day avg open-task age, p90 open-task age, rolling 14-day median age-at-completion) and `calculateFlows` (created/completed counts per day/week/month bucket, broken down by the active group-by's keys as of each event's day).
 
 ### Server Routes (`src/routes/`)
@@ -110,7 +110,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 95 tests as of the flow-mode work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 98 tests as of the flow-mode work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 

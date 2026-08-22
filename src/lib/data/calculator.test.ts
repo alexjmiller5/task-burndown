@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { AGE_BAND_ORDER, calculateDailyCounts } from './calculator.ts';
+import { AGE_BAND_ORDER, AI_ORDER, calculateDailyCounts } from './calculator.ts';
 import { buildEventsMap } from './events.ts';
 import type { Task } from '$lib/types.js';
 
@@ -13,6 +13,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		tags: ['Work'],
 		priority: 'Medium',
 		projectName: '(No Project)',
+		aiReady: false,
+		aiCompleted: false,
 		hasProject: false,
 		lastEditedTime: '2026-01-02T00:00:00.000Z',
 		...overrides
@@ -157,4 +159,24 @@ test('calculateDailyCounts — age group-by buckets an old task into 6m+', () =>
 	const jan1 = result.find((d) => d.date === '2026-01-01')!;
 	expect(jan1['6m+']).toEqual(1);
 	expect(jan1['<1w']).toEqual(0);
+});
+
+test('calculateDailyCounts — ai group-by splits by AI involvement', () => {
+	const tasks = [
+		makeTask({ id: 'a', dueDate: '2026-05-04', aiReady: true }),
+		makeTask({ id: 'b', dueDate: '2026-05-04', completed: '2026-05-06', aiCompleted: true }),
+		makeTask({ id: 'c', dueDate: '2026-05-04' })
+	];
+	const events = buildEventsMap(tasks, 'America/New_York');
+	const result = calculateDailyCounts({
+		events,
+		minDate: '2026-05-04',
+		limitDate: '2026-05-05',
+		groupBy: 'ai',
+		allCategories: [...AI_ORDER],
+		selectedCategories: new Set(AI_ORDER)
+	});
+	expect(result[0]['AI Ready']).toEqual(1);
+	expect(result[0]['AI Completed']).toEqual(1);
+	expect(result[0]['Manual']).toEqual(1);
 });

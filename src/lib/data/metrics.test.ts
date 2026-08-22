@@ -1,5 +1,11 @@
 import { expect, test } from 'vitest';
-import { avgDueToCompletion, calculateFlows, cancelRate, rollingAvgTotals, sampleDailyCounts } from './metrics.ts';
+import {
+	avgDueToCompletion,
+	calculateFlows,
+	cancelRate,
+	rollingAvgTotals,
+	sampleDailyCounts
+} from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -12,6 +18,8 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		tags: ['Work'],
 		priority: 'Medium',
 		projectName: '(No Project)',
+		aiReady: false,
+		aiCompleted: false,
 		hasProject: false,
 		lastEditedTime: '2026-01-02T00:00:00.000Z',
 		...overrides
