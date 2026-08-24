@@ -13,7 +13,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		tags: ['Work'],
 		priority: 'Medium',
 		projectName: '(No Project)',
-		aiReady: false,
 		aiCompleted: false,
 		hasProject: false,
 		lastEditedTime: '2026-01-02T00:00:00.000Z',
@@ -161,9 +160,9 @@ test('calculateDailyCounts — age group-by buckets an old task into 6m+', () =>
 	expect(jan1['<1w']).toEqual(0);
 });
 
-test('calculateDailyCounts — ai group-by splits by AI involvement', () => {
+test('calculateDailyCounts — ai group-by splits AI-completed from manual', () => {
 	const tasks = [
-		makeTask({ id: 'a', dueDate: '2026-05-04', aiReady: true }),
+		makeTask({ id: 'a', dueDate: '2026-05-04' }),
 		makeTask({ id: 'b', dueDate: '2026-05-04', completed: '2026-05-06', aiCompleted: true }),
 		makeTask({ id: 'c', dueDate: '2026-05-04' })
 	];
@@ -176,7 +175,6 @@ test('calculateDailyCounts — ai group-by splits by AI involvement', () => {
 		allCategories: [...AI_ORDER],
 		selectedCategories: new Set(AI_ORDER)
 	});
-	expect(result[0]['AI Ready']).toEqual(1);
 	expect(result[0]['AI Completed']).toEqual(1);
-	expect(result[0]['Manual']).toEqual(1);
+	expect(result[0]['Manual']).toEqual(2);
 });

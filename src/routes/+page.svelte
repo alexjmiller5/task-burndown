@@ -55,10 +55,9 @@
 		'6m+': '#6366F1'
 	};
 
-	// AI Completed = green (like Completed), AI Ready = blue (queued), Manual = slate.
+	// AI Completed = green (like Completed), everything else slate.
 	const AI_COLORS: Record<string, string> = {
 		'AI Completed': '#22C55E',
-		'AI Ready': '#3B82F6',
 		Manual: '#64748B'
 	};
 
