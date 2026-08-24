@@ -7,8 +7,9 @@ const AGE_BAND_NAMES = ['<1w', '1w-1m', '1-3m', '3-6m', '6m+'] as const;
 // Display order: oldest band at the bottom of the stack.
 export const AGE_BAND_ORDER = [...AGE_BAND_NAMES].reverse();
 
-// AI involvement: completed by AI, queued for AI, or plain manual.
-export const AI_ORDER = ['AI Completed', 'AI Ready', 'Manual'] as const;
+// AI involvement: finished by an agent, or not. (Notion's AI Ready queue flag
+// is deliberately not charted — too few tasks to read as anything but noise.)
+export const AI_ORDER = ['AI Completed', 'Manual'] as const;
 
 function getAgeBand(task: Task, dateStr: string, tz: string): string {
 	const age = diffDays(toLocalDateStr(task.created, tz), dateStr);
@@ -30,7 +31,7 @@ export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: 
 		case 'age':
 			return [getAgeBand(task, dateStr, tz)];
 		case 'ai':
-			return [task.aiCompleted ? 'AI Completed' : task.aiReady ? 'AI Ready' : 'Manual'];
+			return [task.aiCompleted ? 'AI Completed' : 'Manual'];
 		default:
 			throw new Error(`Unhandled groupBy: ${groupBy}`);
 	}

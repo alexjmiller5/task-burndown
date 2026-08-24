@@ -17,7 +17,6 @@ export interface Task {
 	tags: string[];
 	priority: string;
 	projectName: string;
-	aiReady: boolean;
 	aiCompleted: boolean;
 	hasProject: boolean;
 	lastEditedTime: string;
