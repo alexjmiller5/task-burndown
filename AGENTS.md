@@ -78,7 +78,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 ### Components (`src/components/`)
 
-- `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp)
+- `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp). The `eventMarkers` plugin draws `MARKERS`: rotated labels are narrow vertical strips, so `placeLabel` (`src/lib/markers.ts`, unit-tested) staggers any that would collide downward, and each label sits on a translucent plate so it stays legible over the areas
 - `FlowChart.svelte` — created-up/completed-down mirrored bars for the main chart's Flow mode, stacked by the active group-by; legend entries toggle both directions of a category
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
@@ -110,7 +110,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 98 tests as of the AI group-by work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 107 tests as of the marker-label work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 

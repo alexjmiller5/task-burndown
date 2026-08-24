@@ -3,7 +3,7 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
-	import type { ChartMarker } from '$lib/markers.js';
+	import { placeLabel, type ChartMarker, type PlacedLabel } from '$lib/markers.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -36,7 +36,32 @@
 			if (!x || x.type !== 'time') return;
 			const { ctx, chartArea } = c;
 			const px = (d: string) => x.getPixelForValue(new Date(`${d}T12:00:00`).getTime());
-			for (const m of markers) {
+			const FONT = '10px JetBrains Mono';
+			const TOP = chartArea.top + 4;
+
+			// Labels are rotated, so they stack downward instead of colliding with
+			// a neighbour a day or two away. Left-to-right keeps placement stable.
+			const placed: PlacedLabel[] = [];
+			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+			/** Rotated label on a translucent plate so it stays readable over the areas. */
+			const drawLabel = (atX: number, label: string, fill: string) => {
+				ctx.font = FONT;
+				const len = ctx.measureText(label).width;
+				const y = placeLabel(placed, atX, len, TOP, chartArea.bottom);
+				placed.push({ x: atX, top: y, bottom: y + len });
+				ctx.save();
+				ctx.translate(atX, y);
+				ctx.rotate(Math.PI / 2);
+				ctx.fillStyle = 'rgba(15, 17, 21, 0.82)';
+				ctx.fillRect(-3, -9, len + 6, 12);
+				ctx.fillStyle = fill;
+				ctx.font = FONT;
+				ctx.fillText(label, 0, 0);
+				ctx.restore();
+			};
+
+			for (const m of ordered) {
 				if (m.direction === 'flat') {
 					// stagnation band: shaded range with the label at its start
 					const a = Math.max(px(m.date), chartArea.left);
@@ -45,12 +70,8 @@
 					ctx.save();
 					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
 					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
-					ctx.fillStyle = 'rgba(148, 163, 184, 0.9)';
-					ctx.font = '10px JetBrains Mono';
-					ctx.translate(a + 10, chartArea.top + 4);
-					ctx.rotate(Math.PI / 2);
-					ctx.fillText(m.label, 0, 0);
 					ctx.restore();
+					drawLabel(a + 10, m.label, 'rgba(148, 163, 184, 0.9)');
 					continue;
 				}
 				const p = px(m.date);
@@ -65,13 +86,8 @@
 				ctx.moveTo(p, chartArea.top);
 				ctx.lineTo(p, chartArea.bottom);
 				ctx.stroke();
-				ctx.setLineDash([]);
-				ctx.fillStyle = `rgb(${color})`;
-				ctx.font = '10px JetBrains Mono';
-				ctx.translate(p - 4, chartArea.top + 4);
-				ctx.rotate(Math.PI / 2);
-				ctx.fillText(m.label, 0, 0);
 				ctx.restore();
+				drawLabel(p - 4, m.label, `rgb(${color})`);
 			}
 		}
 	};
