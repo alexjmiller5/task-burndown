@@ -57,8 +57,13 @@
 			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
 			const stripTop = x.bottom + 5;
 
+			// Markers are annotations, not data: one neutral colour for all of them.
+			// Brighter than the #94A3B8 axis ticks so the strip reads as its own layer.
+			const RULE = '148, 163, 184';
+			const TEXT = '203, 213, 225';
+
 			/** Horizontal label in the strip, with its rule dropping into the plot. */
-			const drawMarker = (atX: number, label: string, rgb: string, dashed: boolean) => {
+			const drawMarker = (atX: number, label: string, dashed: boolean) => {
 				ctx.font = FONT;
 				const w = ctx.measureText(label).width;
 				const left = Math.max(chartArea.left, Math.min(atX - w / 2, chartArea.right - w));
@@ -67,7 +72,7 @@
 				const y = stripTop + lane * MARKER_LANE_HEIGHT;
 
 				ctx.save();
-				ctx.strokeStyle = `rgba(${rgb}, 0.55)`;
+				ctx.strokeStyle = `rgba(${RULE}, 0.5)`;
 				ctx.lineWidth = 1;
 				if (dashed) ctx.setLineDash([4, 4]);
 				ctx.beginPath();
@@ -78,7 +83,7 @@
 
 				// Connector runs only inside the strip, so it never crosses the ticks.
 				ctx.save();
-				ctx.strokeStyle = `rgba(${rgb}, 0.35)`;
+				ctx.strokeStyle = `rgba(${RULE}, 0.35)`;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				ctx.moveTo(atX, stripTop - 4);
@@ -87,7 +92,7 @@
 				ctx.restore();
 
 				ctx.save();
-				ctx.fillStyle = `rgb(${rgb})`;
+				ctx.fillStyle = `rgb(${TEXT})`;
 				ctx.font = FONT;
 				ctx.textBaseline = 'top';
 				ctx.fillText(label, left, y);
@@ -104,13 +109,12 @@
 					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
 					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
 					ctx.restore();
-					drawMarker(a, m.label, '148, 163, 184', false);
+					drawMarker(a, m.label, false);
 					continue;
 				}
 				const p = px(m.date);
 				if (p < chartArea.left || p > chartArea.right) continue;
-				// up = blue (like Created), down = green (like Completed)
-				drawMarker(p, m.label, m.direction === 'up' ? '59, 130, 246' : '34, 197, 94', true);
+				drawMarker(p, m.label, true);
 			}
 
 			// Re-reserve the strip when the lane count changes (zoom, range, resize).
