@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { FlowBucket, FlowRow } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
+	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -111,11 +112,13 @@
 						},
 						onClick: (_e: any, item: any, legend: any) => {
 							const c = legend.chart;
+							const nowHidden = c.isDatasetVisible(item.datasetIndex);
 							for (let i = 0; i < c.data.datasets.length; i++) {
 								if (c.data.datasets[i].label === item.text) {
-									c.setDatasetVisibility(i, !c.isDatasetVisible(i));
+									c.setDatasetVisibility(i, !nowHidden);
 								}
 							}
+							recordLegendToggle(item.text, nowHidden);
 							c.update();
 						}
 					},
@@ -170,9 +173,12 @@
 		if (!ChartJS || !canvas) return;
 		chart?.destroy();
 		chart = new ChartJS(canvas, buildConfig());
-		if (hiddenByDefault.length > 0) {
+		// Restore remembered legend toggles (shared with TaskChart) so they
+		// survive the rebuild.
+		syncLegendMemory(categories, hiddenByDefault);
+		if (hiddenLegendLabels.size > 0) {
 			for (let i = 0; i < chart.data.datasets.length; i++) {
-				if (hiddenByDefault.includes(chart.data.datasets[i].label)) {
+				if (hiddenLegendLabels.has(chart.data.datasets[i].label)) {
 					chart.setDatasetVisibility(i, false);
 				}
 			}

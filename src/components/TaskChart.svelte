@@ -3,6 +3,7 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
+	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import {
 		assignLane,
 		laneStripHeight,
@@ -271,6 +272,16 @@
 							padding: isMobile ? 8 : 16,
 							useBorderRadius: true,
 							borderRadius: 2
+						},
+						// Default toggle + remember the choice, so it survives the
+						// chart rebuild that any range/data change triggers.
+						onClick: (_e: any, item: any, legend: any) => {
+							const c = legend.chart;
+							const i = item.datasetIndex;
+							const nowHidden = c.isDatasetVisible(i);
+							c.setDatasetVisibility(i, !nowHidden);
+							recordLegendToggle(c.data.datasets[i].label, nowHidden);
+							c.update();
 						}
 					},
 					tooltip: {
@@ -343,10 +354,12 @@
 			...buildConfig(dailyCounts, categories, dateRange),
 			plugins: [markerPlugin]
 		});
-		// Hide datasets that should be off by default (e.g. "(No Project)")
-		if (hiddenByDefault.length > 0) {
+		// Restore remembered legend toggles (seeded from hiddenByDefault when the
+		// category set changes) so they survive the rebuild.
+		syncLegendMemory(categories, hiddenByDefault);
+		if (hiddenLegendLabels.size > 0) {
 			for (let i = 0; i < chart.data.datasets.length; i++) {
-				if (hiddenByDefault.includes(chart.data.datasets[i].label)) {
+				if (hiddenLegendLabels.has(chart.data.datasets[i].label)) {
 					chart.setDatasetVisibility(i, false);
 				}
 			}
