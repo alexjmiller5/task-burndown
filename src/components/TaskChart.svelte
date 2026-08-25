@@ -57,13 +57,17 @@
 			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
 			const stripTop = x.bottom + 5;
 
-			// Markers are annotations, not data: one neutral colour for all of them.
-			// Brighter than the #94A3B8 axis ticks so the strip reads as its own layer.
-			const RULE = '148, 163, 184';
-			const TEXT = '203, 213, 225';
+			// Backlog grew = bad = red; backlog shrank = good = green (the same green
+			// AI Completed already uses for "done"). Stagnation bands stay neutral.
+			// Both are the light-400 shades: the age ramp's 1-3m band is a dark
+			// crimson (#E11D48), so a mid red rule vanished into it — these separate
+			// on luminance as well as hue, against any band.
+			const UP = '248, 113, 113';
+			const DOWN = '74, 222, 128';
+			const FLAT = '148, 163, 184';
 
 			/** Horizontal label in the strip, with its rule dropping into the plot. */
-			const drawMarker = (atX: number, label: string, dashed: boolean) => {
+			const drawMarker = (atX: number, label: string, rgb: string, dashed: boolean) => {
 				ctx.font = FONT;
 				const w = ctx.measureText(label).width;
 				const left = Math.max(chartArea.left, Math.min(atX - w / 2, chartArea.right - w));
@@ -72,7 +76,7 @@
 				const y = stripTop + lane * MARKER_LANE_HEIGHT;
 
 				ctx.save();
-				ctx.strokeStyle = `rgba(${RULE}, 0.5)`;
+				ctx.strokeStyle = `rgba(${rgb}, 0.65)`;
 				ctx.lineWidth = 1;
 				if (dashed) ctx.setLineDash([4, 4]);
 				ctx.beginPath();
@@ -83,7 +87,7 @@
 
 				// Connector runs only inside the strip, so it never crosses the ticks.
 				ctx.save();
-				ctx.strokeStyle = `rgba(${RULE}, 0.35)`;
+				ctx.strokeStyle = `rgba(${rgb}, 0.4)`;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				ctx.moveTo(atX, stripTop - 4);
@@ -92,7 +96,7 @@
 				ctx.restore();
 
 				ctx.save();
-				ctx.fillStyle = `rgb(${TEXT})`;
+				ctx.fillStyle = `rgb(${rgb})`;
 				ctx.font = FONT;
 				ctx.textBaseline = 'top';
 				ctx.fillText(label, left, y);
@@ -109,12 +113,12 @@
 					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
 					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
 					ctx.restore();
-					drawMarker(a, m.label, false);
+					drawMarker(a, m.label, FLAT, false);
 					continue;
 				}
 				const p = px(m.date);
 				if (p < chartArea.left || p > chartArea.right) continue;
-				drawMarker(p, m.label, true);
+				drawMarker(p, m.label, m.direction === 'up' ? UP : DOWN, true);
 			}
 
 			// Re-reserve the strip when the lane count changes (zoom, range, resize).
