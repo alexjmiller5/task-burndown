@@ -1,13 +1,6 @@
 import type { Task, TaskEvent } from '$lib/types.js';
-import { AGE_BAND_LIMITS } from './calculator.ts';
+import { AGE_BAND_LIMITS, getTaskStartDate } from './calculator.ts';
 import { addDays, getCurrentDateStr, toLocalDateStr } from './timezone.ts';
-
-function getEffectiveStartDate(task: Task, tz: string): string {
-	if (task.dueDate) {
-		return toLocalDateStr(task.dueDate, tz);
-	}
-	return toLocalDateStr(task.created, tz);
-}
 
 export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent> {
 	const events = new Map<string, TaskEvent>();
@@ -20,10 +13,8 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 	}
 
 	for (const task of tasks) {
-		const startDate = getEffectiveStartDate(task, tz);
+		const startDate = getTaskStartDate(task, tz);
 		const completedDate = task.completed ? toLocalDateStr(task.completed, tz) : null;
-
-		if (completedDate && completedDate < startDate) continue;
 
 		addEvent(startDate, 'created', task);
 
@@ -33,9 +24,8 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 
 		// Age-band crossings: the task's group changes on these days even without
 		// an edit. Harmless for other group-bys (unchanged keys are a no-op).
-		const createdDate = toLocalDateStr(task.created, tz);
 		for (const limit of AGE_BAND_LIMITS) {
-			const crossing = addDays(createdDate, limit);
+			const crossing = addDays(startDate, limit);
 			if (completedDate && crossing > completedDate) break;
 			addEvent(crossing, 'stateChange', task);
 		}
@@ -47,9 +37,9 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 export function getMinDate(tasks: Task[], tz: string): string {
 	if (tasks.length === 0) return getCurrentDateStr(tz);
 
-	let min = getEffectiveStartDate(tasks[0], tz);
+	let min = getTaskStartDate(tasks[0], tz);
 	for (const task of tasks) {
-		const start = getEffectiveStartDate(task, tz);
+		const start = getTaskStartDate(task, tz);
 		if (start < min) min = start;
 	}
 

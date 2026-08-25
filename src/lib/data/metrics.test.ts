@@ -159,3 +159,20 @@ test('cancelRate is the percentage of resolved tasks that were canceled', () => 
 	expect(cancelRate(tasks)).toEqual(25);
 	expect(cancelRate([makeTask({ status: 'To Do' })])).toBeNull();
 });
+
+test('calculateFlows — a backfilled task counts as created on its due date', () => {
+	// Matches the burndown, which plots it from the due date.
+	const task = makeTask({ created: '2026-08-23T12:00:00.000Z', dueDate: '2026-04-20' });
+	const rows = calculateFlows([task], 'America/New_York', 'day', '2026-04-20', '2026-04-20', 'tag');
+	expect(rows[0].created).toEqual({ Work: 1 });
+
+	const later = calculateFlows(
+		[task],
+		'America/New_York',
+		'day',
+		'2026-08-23',
+		'2026-08-23',
+		'tag'
+	);
+	expect(later[0].created).toEqual({});
+});

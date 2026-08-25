@@ -53,7 +53,7 @@ Pure TypeScript modules shared between server and client:
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
-- `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by and `AI_ORDER` for the `ai` group-by (AI Completed / Manual, from the Notion `AI Completed` checkbox); `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
+- `calculator.ts` — Day-by-day running count calculation, O(days × tasks). Uses `addDays` from `timezone.ts` (DST-safe). Owns `getTaskStartDate`, the single anchor every view uses (see Key Concepts). Also owns the age bands (`AGE_BAND_LIMITS` 7/30/90/180 days, `AGE_BAND_ORDER` oldest-first) used by the `age` group-by and `AI_ORDER` for the `ai` group-by (AI Completed / Manual, from the Notion `AI Completed` checkbox); `events.ts` emits band-crossing `stateChange` events so a task migrates bands on days with no edits.
 - `metrics.ts` — `calculateDailyMetrics` (per-day avg open-task age, p90 open-task age, rolling 14-day median age-at-completion) and `calculateFlows` (created/completed counts per day/week/month bucket, broken down by the active group-by's keys as of each event's day).
 
 ### Server Routes (`src/routes/`)
@@ -78,7 +78,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 ### Components (`src/components/`)
 
-- `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp). The `eventMarkers` plugin draws `MARKERS`: rotated labels are narrow vertical strips, so `placeLabel` (`src/lib/markers.ts`, unit-tested) staggers any that would collide downward, and each label sits on a translucent plate so it stays legible over the areas
+- `TaskChart.svelte` — Chart.js stacked area chart (client-only via dynamic import); `tagColors` values may be Notion color names or `#hex` (the age-band ramp). The `eventMarkers` plugin draws `MARKERS`: each rule spans the plot, but labels sit in a strip _below_ the x-axis so they clear both the bars and the legend. `assignLane` (`src/lib/markers.ts`, unit-tested) drops each label into the highest free horizontal lane; the strip is reserved via `layout.padding.bottom`, re-measured at draw time and capped at 3 relayouts per chart instance so it can't loop
 - `FlowChart.svelte` — created-up/completed-down mirrored bars for the main chart's Flow mode, stacked by the active group-by; legend entries toggle both directions of a category
 - `src/lib/colors.ts` — shared series-color resolution (Notion color names, `#hex`, fallback palette) used by the bar charts
 - `RangeSlider.svelte` — Dual-handle date range slider
@@ -110,7 +110,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Testing
 
-Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 107 tests as of the marker-label work.
+Tests live next to the modules they cover (`*.test.ts`) and run via `bun run test` (vitest). 115 tests as of the effective-start-date work.
 
 Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` — the places where actual logic lives. Svelte component tests are intentionally not wired up.
 
@@ -119,6 +119,8 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 **Incremental fetching**: Instead of fetching all ~4,300 tasks, the refresh uses the earlier of `max(created)` and `max(lastEditedTime)` across cached tasks as a threshold, then queries Notion with `last_edited_time >= threshold`. Fresh tasks are merged by ID into the cache. This threshold is only sound if the cache actually contains every edit up to its own maximum — a full sync establishes that invariant and each incremental preserves it. (A historical bug synced from `start of today` instead, silently skipping edits from unopened days; a poisoned cache like that can only be repaired by a full sync.)
 
 **Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The `/api/prune` id sweep handles this cheaply: fetch live page ids (slim `filter_properties[]=title` queries) for tasks that could plausibly change, drop sweep-eligible cached tasks not in the set. Accepted tradeoff: deleting an old, settled, non-open task won't be noticed until a full sync — such tasks are assumed immutable. The Sync button runs edits sync + sweep; the full re-parse loop is only needed to bootstrap an empty cache.
+
+**Effective start date**: `getTaskStartDate` (`calculator.ts`) is the one date every view anchors on — due date when set, else created, and clamped back to the completion day if the task was finished before it. Due-over-created is what makes backfilled tasks honest: entering a task months late shouldn't make a months-old obligation look new. The clamp covers deferred tasks knocked out early (~3% of completions), which used to be dropped from the chart entirely — they now open and close on the same day, netting zero open but still counting as a completion. `buildEventsMap` (start + band crossings), `getAgeBand`, and `calculateFlows` all use it, so the burndown, the age bands and the Flow chart can't disagree about when a task began.
 
 **Timezone awareness**: The user picks a timezone from a curated list (default `America/New_York`). It _is_ persisted across reloads (localStorage via `preferences.ts`, along with groupBy, toggles, and preset — presets re-anchor to today on restore). The selected timezone affects: `created_time` → date bucketing, range presets ("today" anchor), the slider's right edge, and `totalActive`. It does _not_ affect Notion `dueDate`/`completed` (already date-only strings).
 

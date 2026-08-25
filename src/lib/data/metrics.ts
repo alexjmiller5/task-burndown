@@ -1,5 +1,5 @@
 import type { DayCount, GroupBy, Task } from '$lib/types.js';
-import { getGroupKeys } from './calculator.ts';
+import { getGroupKeys, getTaskStartDate } from './calculator.ts';
 import { addDays, diffDays, toLocalDateStr } from './timezone.ts';
 
 export type FlowBucket = 'day' | 'week' | 'month';
@@ -57,7 +57,7 @@ export function calculateFlows(
 	}
 
 	for (const task of tasks) {
-		count(toLocalDateStr(task.created, tz), task, 'created');
+		count(getTaskStartDate(task, tz), task, 'created');
 		if (task.completed) count(toLocalDateStr(task.completed, tz), task, 'completed');
 	}
 	return Array.from(rows.values());
