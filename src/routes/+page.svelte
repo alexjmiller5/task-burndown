@@ -9,7 +9,6 @@
 		avgDueToCompletion,
 		calculateFlows,
 		cancelRate,
-		rollingAvgTotals,
 		sampleDailyCounts,
 		type FlowBucket
 	} from '$lib/data/metrics.js';
@@ -240,11 +239,10 @@
 	let flows = $derived(
 		calculateFlows(filteredTasks, timezone, flowBucket, dateStart, dateEnd, groupBy)
 	);
-	// Sample the visible window so the current partial week/month keeps a bar
-	// (sampling the full series would date it beyond the range and lose it).
-	let avgTotals = $derived(rollingAvgTotals(dailyCounts));
 	let avgDueToDone = $derived(avgDueToCompletion(filteredTasks, timezone));
 	let canceledPct = $derived(cancelRate(allTasks));
+	// Sample the visible window so the current partial week/month keeps a bar
+	// (sampling the full series would date it beyond the range and lose it).
 	let displayCounts = $derived(
 		sampleDailyCounts(
 			dailyCounts.filter((d) => d.date >= dateStart && d.date <= dateEnd),
@@ -859,7 +857,7 @@
 						dateRange={{ start: dateStart, end: dateEnd }}
 						tagColors={chartColors}
 						{hiddenByDefault}
-						averages={avgTotals}
+						avgSource={dailyCounts}
 						markers={showMarkers ? MARKERS : []}
 					/>
 				{/if}
