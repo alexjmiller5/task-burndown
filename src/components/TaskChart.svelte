@@ -3,7 +3,13 @@
 	import type { DayCount } from '$lib/types.js';
 	import type { FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
-	import { placeLabel, type ChartMarker, type PlacedLabel } from '$lib/markers.js';
+	import {
+		assignLane,
+		laneStripHeight,
+		MARKER_LANE_HEIGHT,
+		type ChartMarker,
+		type PlacedLabel
+	} from '$lib/markers.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -28,7 +34,13 @@
 		markers = []
 	}: Props = $props();
 
-	// Vertical event lines for the manual markers (time-axis buckets only)
+	// Vertical event lines for the manual markers (time-axis buckets only).
+	// Labels live in a strip below the x-axis, reserved via bottom padding, so
+	// they clear both the bars and the legend.
+	let laneStrip = 0;
+	// Re-measuring the strip costs a relayout, so cap it per chart instance —
+	// a loop here would hang the page, and it settles on the first pass anyway.
+	let laneFits = 0;
 	const markerPlugin = {
 		id: 'eventMarkers',
 		afterDatasetsDraw(c: any) {
@@ -37,27 +49,48 @@
 			const { ctx, chartArea } = c;
 			const px = (d: string) => x.getPixelForValue(new Date(`${d}T12:00:00`).getTime());
 			const FONT = '10px JetBrains Mono';
-			const TOP = chartArea.top + 4;
+			const GAP = 10;
 
-			// Labels are rotated, so they stack downward instead of colliding with
-			// a neighbour a day or two away. Left-to-right keeps placement stable.
+			// Labels sit in lanes in the strip above the plot, so they never cover
+			// the bars. Left-to-right keeps lane assignment stable.
 			const placed: PlacedLabel[] = [];
 			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
+			const stripTop = x.bottom + 5;
 
-			/** Rotated label on a translucent plate so it stays readable over the areas. */
-			const drawLabel = (atX: number, label: string, fill: string) => {
+			/** Horizontal label in the strip, with its rule dropping into the plot. */
+			const drawMarker = (atX: number, label: string, rgb: string, dashed: boolean) => {
 				ctx.font = FONT;
-				const len = ctx.measureText(label).width;
-				const y = placeLabel(placed, atX, len, TOP, chartArea.bottom);
-				placed.push({ x: atX, top: y, bottom: y + len });
+				const w = ctx.measureText(label).width;
+				const left = Math.max(chartArea.left, Math.min(atX - w / 2, chartArea.right - w));
+				const lane = assignLane(placed, left - GAP, left + w + GAP);
+				placed.push({ lane, left: left - GAP, right: left + w + GAP });
+				const y = stripTop + lane * MARKER_LANE_HEIGHT;
+
 				ctx.save();
-				ctx.translate(atX, y);
-				ctx.rotate(Math.PI / 2);
-				ctx.fillStyle = 'rgba(15, 17, 21, 0.82)';
-				ctx.fillRect(-3, -9, len + 6, 12);
-				ctx.fillStyle = fill;
+				ctx.strokeStyle = `rgba(${rgb}, 0.55)`;
+				ctx.lineWidth = 1;
+				if (dashed) ctx.setLineDash([4, 4]);
+				ctx.beginPath();
+				ctx.moveTo(atX, chartArea.top);
+				ctx.lineTo(atX, chartArea.bottom);
+				ctx.stroke();
+				ctx.restore();
+
+				// Connector runs only inside the strip, so it never crosses the ticks.
+				ctx.save();
+				ctx.strokeStyle = `rgba(${rgb}, 0.35)`;
+				ctx.lineWidth = 1;
+				ctx.beginPath();
+				ctx.moveTo(atX, stripTop - 4);
+				ctx.lineTo(atX, y + MARKER_LANE_HEIGHT - 3);
+				ctx.stroke();
+				ctx.restore();
+
+				ctx.save();
+				ctx.fillStyle = `rgb(${rgb})`;
 				ctx.font = FONT;
-				ctx.fillText(label, 0, 0);
+				ctx.textBaseline = 'top';
+				ctx.fillText(label, left, y);
 				ctx.restore();
 			};
 
@@ -71,23 +104,22 @@
 					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
 					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
 					ctx.restore();
-					drawLabel(a + 10, m.label, 'rgba(148, 163, 184, 0.9)');
+					drawMarker(a, m.label, '148, 163, 184', false);
 					continue;
 				}
 				const p = px(m.date);
 				if (p < chartArea.left || p > chartArea.right) continue;
 				// up = blue (like Created), down = green (like Completed)
-				const color = m.direction === 'up' ? '59, 130, 246' : '34, 197, 94';
-				ctx.save();
-				ctx.strokeStyle = `rgba(${color}, 0.6)`;
-				ctx.setLineDash([4, 4]);
-				ctx.lineWidth = 1;
-				ctx.beginPath();
-				ctx.moveTo(p, chartArea.top);
-				ctx.lineTo(p, chartArea.bottom);
-				ctx.stroke();
-				ctx.restore();
-				drawLabel(p - 4, m.label, `rgb(${color})`);
+				drawMarker(p, m.label, m.direction === 'up' ? '59, 130, 246' : '34, 197, 94', true);
+			}
+
+			// Re-reserve the strip when the lane count changes (zoom, range, resize).
+			const needed = laneStripHeight(placed);
+			if (needed !== laneStrip && laneFits < 3) {
+				laneStrip = needed;
+				laneFits++;
+				c.options.layout.padding.bottom = needed;
+				requestAnimationFrame(() => c.update('none'));
 			}
 		}
 	};
@@ -179,6 +211,7 @@
 				responsive: true,
 				maintainAspectRatio: false,
 				animation: false,
+				layout: { padding: { bottom: 0 } },
 				interaction: {
 					mode: 'index' as const,
 					intersect: false
@@ -260,6 +293,8 @@
 	function rebuildChart() {
 		if (!ChartJS || !canvas) return;
 		chart?.destroy();
+		laneStrip = 0;
+		laneFits = 0;
 		chart = new ChartJS(canvas, {
 			...buildConfig(dailyCounts, categories, dateRange),
 			plugins: [markerPlugin]

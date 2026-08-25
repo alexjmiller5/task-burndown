@@ -11,35 +11,38 @@ export interface ChartMarker {
 
 export const MARKERS: ChartMarker[] = [];
 
-/** A marker label already drawn: a narrow vertical strip at `x`, spanning `top`..`bottom`. */
+/** Marker labels live in horizontal lanes in the strip above the plot. */
 export interface PlacedLabel {
-	x: number;
-	top: number;
-	bottom: number;
+	lane: number;
+	left: number;
+	right: number;
 }
 
+export const MARKER_LANE_HEIGHT = 13;
+export const MARKER_MAX_LANES = 6;
+
 /**
- * Marker labels are rotated 90°, so each is a narrow vertical strip. Two only
- * collide when their x strips overlap AND their y ranges do — markers a week
- * apart never clash, markers a day apart always do. Push the newcomer below
- * anything it would sit on top of and return the y to start drawing at.
+ * Drop a label into the highest lane it fits in. Markers far enough apart
+ * share the top lane; ones that would run into each other stack downward.
+ * Past `maxLanes` we give up and reuse the last lane rather than pushing the
+ * strip taller than the chart can spare.
  */
-export function placeLabel(
+export function assignLane(
 	placed: PlacedLabel[],
-	x: number,
-	length: number,
-	top: number,
-	bottom: number,
-	xGap = 14,
-	yGap = 6
+	left: number,
+	right: number,
+	maxLanes = MARKER_MAX_LANES
 ): number {
-	let y = top;
-	// Re-scan after each push: moving down can land on a different label.
-	for (let guard = 0; guard <= placed.length; guard++) {
-		const hit = placed.find((p) => Math.abs(p.x - x) < xGap && y < p.bottom && y + length > p.top);
-		if (!hit) break;
-		y = hit.bottom + yGap;
+	for (let lane = 0; lane < maxLanes; lane++) {
+		const clash = placed.some((p) => p.lane === lane && left < p.right && right > p.left);
+		if (!clash) return lane;
 	}
-	// Never run off the bottom of the plot; better to overlap than to vanish.
-	return y + length > bottom ? top : y;
+	return maxLanes - 1;
+}
+
+/** Height of the strip needed to hold everything placed so far. */
+export function laneStripHeight(placed: PlacedLabel[]): number {
+	if (placed.length === 0) return 0;
+	const lanes = Math.max(...placed.map((p) => p.lane)) + 1;
+	return lanes * MARKER_LANE_HEIGHT + 6;
 }
