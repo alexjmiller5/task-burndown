@@ -11,8 +11,20 @@ export const AGE_BAND_ORDER = [...AGE_BAND_NAMES].reverse();
 // is deliberately not charted — too few tasks to read as anything but noise.)
 export const AI_ORDER = ['AI Completed', 'Manual'] as const;
 
+/**
+ * The day a task starts counting: its due date when it has one, else when it
+ * was created. A task completed before that (a deferred one knocked out early)
+ * starts on its completion day instead, so it can't be "done before it began".
+ * Everything — the chart, age bands, flows — anchors on this one date.
+ */
+export function getTaskStartDate(task: Task, tz: string): string {
+	const start = task.dueDate ? toLocalDateStr(task.dueDate, tz) : toLocalDateStr(task.created, tz);
+	const completed = task.completed ? toLocalDateStr(task.completed, tz) : null;
+	return completed && completed < start ? completed : start;
+}
+
 function getAgeBand(task: Task, dateStr: string, tz: string): string {
-	const age = diffDays(toLocalDateStr(task.created, tz), dateStr);
+	const age = diffDays(getTaskStartDate(task, tz), dateStr);
 	for (let i = 0; i < AGE_BAND_LIMITS.length; i++) {
 		if (age < AGE_BAND_LIMITS[i]) return AGE_BAND_NAMES[i];
 	}

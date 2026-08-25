@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { AGE_BAND_ORDER, AI_ORDER, calculateDailyCounts } from './calculator.ts';
+import { AGE_BAND_ORDER, AI_ORDER, calculateDailyCounts, getGroupKeys } from './calculator.ts';
 import { buildEventsMap } from './events.ts';
 import type { Task } from '$lib/types.js';
 
@@ -177,4 +177,18 @@ test('calculateDailyCounts — ai group-by splits AI-completed from manual', () 
 	});
 	expect(result[0]['AI Completed']).toEqual(1);
 	expect(result[0]['Manual']).toEqual(2);
+});
+
+test('getAgeBand — ages a backfilled task from its due date, not its created time', () => {
+	// Typed in Aug 23, but due Apr 20: on May 20 it is a month old, not "new".
+	const task = makeTask({ created: '2026-08-23T12:00:00.000Z', dueDate: '2026-04-20' });
+	expect(getGroupKeys(task, 'age', '2026-04-21', 'America/New_York')).toEqual(['<1w']);
+	expect(getGroupKeys(task, 'age', '2026-05-19', 'America/New_York')).toEqual(['1w-1m']);
+	// 30 days exactly is already the next band up
+	expect(getGroupKeys(task, 'age', '2026-05-20', 'America/New_York')).toEqual(['1-3m']);
+});
+
+test('getAgeBand — never reports a negative age for an early completion', () => {
+	const task = makeTask({ dueDate: '2026-09-01', completed: '2026-08-17' });
+	expect(getGroupKeys(task, 'age', '2026-08-17', 'America/New_York')).toEqual(['<1w']);
 });
