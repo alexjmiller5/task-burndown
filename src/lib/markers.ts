@@ -1,9 +1,8 @@
-// Manual event markers on the Active chart (day/week buckets). All render in
-// one neutral slate — the chart itself already shows which way the line moved,
-// and colour-coding direction only competed with the series colours. Direction
-// still records intent: 'up' = task dump, 'down' = purge, 'flat' = a shaded
-// band from date to end (stagnation: trips, breaks). The Markers chip toggles
-// all of them.
+// Manual event markers on the Active chart (day/week buckets). Colour follows
+// the burndown's own good/bad axis: 'up' = task dump, backlog grew, red;
+// 'down' = purge, backlog shrank, green (the same green AI Completed uses for
+// "done"); 'flat' = a shaded neutral band from date to end (stagnation: trips,
+// breaks). The Markers chip toggles all of them.
 export interface ChartMarker {
 	date: string; // YYYY-MM-DD
 	end?: string; // for 'flat' bands
