@@ -73,6 +73,7 @@
 				dashed: boolean;
 				lane: number;
 				left: number;
+				w: number;
 			}[] = [];
 			for (const m of ordered) {
 				const isFlat = m.direction === 'flat';
@@ -97,30 +98,49 @@
 					rgb: isFlat ? FLAT : m.direction === 'up' ? UP : DOWN,
 					dashed: !isFlat,
 					lane,
-					left
+					left,
+					w
 				});
 			}
 
 			const needed = laneStripHeight(placed);
-			const ruleTop = TOP + needed;
+			const laneY = (lane: number) => TOP + lane * MARKER_LANE_HEIGHT;
 
-			// Pass 2: rules start below the whole label block, so none crosses text.
+			// Pass 2: each rule runs from its own label down to the axis, broken
+			// around any lower label it would otherwise strike through.
 			for (const it of items) {
+				const gaps = items
+					.filter((o) => o.lane > it.lane && it.atX >= o.left - 2 && it.atX <= o.left + o.w + 2)
+					.map((o) => [laneY(o.lane) - 2, laneY(o.lane) + MARKER_LANE_HEIGHT - 1])
+					.sort((a, b) => a[0] - b[0]);
+
 				ctx.save();
 				ctx.strokeStyle = `rgba(${it.rgb}, 0.65)`;
 				ctx.lineWidth = 1;
 				if (it.dashed) ctx.setLineDash([4, 4]);
 				ctx.beginPath();
-				ctx.moveTo(it.atX, ruleTop);
+				let y = laneY(it.lane) + MARKER_LANE_HEIGHT - 2;
+				for (const [gapStart, gapEnd] of gaps) {
+					if (gapEnd <= y) continue;
+					if (gapStart > y) {
+						ctx.moveTo(it.atX, y);
+						ctx.lineTo(it.atX, gapStart);
+					}
+					y = Math.max(y, gapEnd);
+				}
+				ctx.moveTo(it.atX, y);
 				ctx.lineTo(it.atX, chartArea.bottom);
 				ctx.stroke();
 				ctx.restore();
+			}
 
+			// Labels last, so no rule can be drawn over their text.
+			for (const it of items) {
 				ctx.save();
 				ctx.fillStyle = `rgb(${it.rgb})`;
 				ctx.font = FONT;
 				ctx.textBaseline = 'top';
-				ctx.fillText(it.label, it.left, TOP + it.lane * MARKER_LANE_HEIGHT);
+				ctx.fillText(it.label, it.left, laneY(it.lane));
 				ctx.restore();
 			}
 
