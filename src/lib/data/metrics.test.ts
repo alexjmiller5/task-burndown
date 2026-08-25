@@ -137,6 +137,20 @@ test('rollingAvgTotals is the trailing 14-day mean of totals', () => {
 	expect(avg['2026-05-20']).toEqual(13.5); // mean of 7..20
 });
 
+test('rollingAvgTotals with categories averages only those series', () => {
+	const days = Array.from({ length: 16 }, (_, i) => ({
+		date: `2026-05-${String(i + 1).padStart(2, '0')}`,
+		total: 100, // deliberately wrong, must be ignored
+		High: 5,
+		Low: 3
+	}));
+	const avg = rollingAvgTotals(days, 14, ['Low']);
+	expect(avg['2026-05-01']).toEqual(3);
+	expect(avg['2026-05-16']).toEqual(3);
+	const both = rollingAvgTotals(days, 14, ['High', 'Low']);
+	expect(both['2026-05-16']).toEqual(8);
+});
+
 test('avgDueToCompletion averages signed days from due date to completion', () => {
 	const tasks = [
 		makeTask({ id: 'late', dueDate: '2026-05-01', completed: '2026-05-04' }), // +3

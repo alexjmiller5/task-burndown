@@ -77,13 +77,25 @@ export function sampleDailyCounts(days: DayCount[], bucket: FlowBucket): DayCoun
 	return Array.from(lastPerBucket.values());
 }
 
-/** Trailing `window`-day mean of the daily totals, keyed by date. */
-export function rollingAvgTotals(days: DayCount[], window = 14): Record<string, number> {
+/**
+ * Trailing `window`-day mean of the daily totals, keyed by date. With
+ * `categories`, only those series are summed — so the line can track what the
+ * legend actually shows instead of the all-series total.
+ */
+export function rollingAvgTotals(
+	days: DayCount[],
+	window = 14,
+	categories?: string[]
+): Record<string, number> {
+	const dayTotal = (d: DayCount) =>
+		categories
+			? categories.reduce((sum, cat) => sum + ((d[cat] as number) || 0), 0)
+			: (d.total as number);
 	const out: Record<string, number> = {};
 	let sum = 0;
 	for (let i = 0; i < days.length; i++) {
-		sum += days[i].total as number;
-		if (i >= window) sum -= days[i - window].total as number;
+		sum += dayTotal(days[i]);
+		if (i >= window) sum -= dayTotal(days[i - window]);
 		out[days[i].date] = sum / Math.min(i + 1, window);
 	}
 	return out;

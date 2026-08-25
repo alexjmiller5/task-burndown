@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { DayCount } from '$lib/types.js';
-	import type { FlowBucket } from '$lib/data/metrics.js';
+	import { rollingAvgTotals, type FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
 	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import {
@@ -20,7 +20,8 @@
 		tagColors: Record<string, string>;
 		hiddenByDefault?: string[];
 		bucket?: FlowBucket;
-		averages?: Record<string, number>;
+		/** Full (non-downsampled) daily series the 14d avg is computed from. */
+		avgSource?: DayCount[];
 		markers?: ChartMarker[];
 	}
 
@@ -31,9 +32,21 @@
 		tagColors,
 		hiddenByDefault = [],
 		bucket = 'day',
-		averages = {},
+		avgSource = [],
 		markers = []
 	}: Props = $props();
+
+	// The 14d avg tracks what the legend shows: hidden categories drop out of
+	// the sum. Recomputed on rebuild and on legend clicks; the marker plugin
+	// reads the latest value for its headroom math.
+	let averages: Record<string, number> = {};
+	function visibleAvg(): Record<string, number> {
+		return rollingAvgTotals(
+			avgSource,
+			14,
+			categories.filter((c) => !hiddenLegendLabels.has(c))
+		);
+	}
 
 	// Vertical event lines for the manual markers (time-axis buckets only).
 	// Labels sit inside the plot, in headroom opened up above the tallest bar by
@@ -281,6 +294,9 @@
 							const nowHidden = c.isDatasetVisible(i);
 							c.setDatasetVisibility(i, !nowHidden);
 							recordLegendToggle(c.data.datasets[i].label, nowHidden);
+							// The avg line follows the visible categories.
+							averages = visibleAvg();
+							c.data.datasets[0].data = c.data.labels.map((d: string) => averages[d] ?? null);
 							c.update();
 						}
 					},
@@ -350,13 +366,15 @@
 		chart?.destroy();
 		laneHeadroom = 0;
 		laneFits = 0;
+		// Sync legend memory first (seeded from hiddenByDefault when the category
+		// set changes) so the avg line is built over the surviving categories.
+		syncLegendMemory(categories, hiddenByDefault);
+		averages = visibleAvg();
 		chart = new ChartJS(canvas, {
 			...buildConfig(dailyCounts, categories, dateRange),
 			plugins: [markerPlugin]
 		});
-		// Restore remembered legend toggles (seeded from hiddenByDefault when the
-		// category set changes) so they survive the rebuild.
-		syncLegendMemory(categories, hiddenByDefault);
+		// Restore remembered legend toggles so they survive the rebuild.
 		if (hiddenLegendLabels.size > 0) {
 			for (let i = 0; i < chart.data.datasets.length; i++) {
 				if (hiddenLegendLabels.has(chart.data.datasets[i].label)) {
@@ -398,7 +416,7 @@
 		const _tc = tagColors;
 		const _h = hiddenByDefault;
 		const _b = bucket;
-		const _a = averages;
+		const _a = avgSource;
 		const _mk = markers;
 		const _m = isMobile;
 		// Rebuild on any change
