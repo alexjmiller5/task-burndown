@@ -12,7 +12,7 @@ export interface ChartMarker {
 
 export const MARKERS: ChartMarker[] = [];
 
-/** Marker labels live in horizontal lanes in the strip above the plot. */
+/** Marker labels live in horizontal lanes in the headroom above the bars. */
 export interface PlacedLabel {
 	lane: number;
 	left: number;
@@ -26,7 +26,7 @@ export const MARKER_MAX_LANES = 6;
  * Drop a label into the highest lane it fits in. Markers far enough apart
  * share the top lane; ones that would run into each other stack downward.
  * Past `maxLanes` we give up and reuse the last lane rather than pushing the
- * strip taller than the chart can spare.
+ * headroom taller than the chart can spare.
  */
 export function assignLane(
 	placed: PlacedLabel[],
@@ -41,7 +41,7 @@ export function assignLane(
 	return maxLanes - 1;
 }
 
-/** Height of the strip needed to hold everything placed so far. */
+/** Height of headroom needed to hold everything placed so far. */
 export function laneStripHeight(placed: PlacedLabel[]): number {
 	if (placed.length === 0) return 0;
 	const lanes = Math.max(...placed.map((p) => p.lane)) + 1;

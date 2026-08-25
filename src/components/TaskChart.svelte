@@ -35,11 +35,11 @@
 	}: Props = $props();
 
 	// Vertical event lines for the manual markers (time-axis buckets only).
-	// Labels live in a strip below the x-axis, reserved via bottom padding, so
-	// they clear both the bars and the legend.
-	let laneStrip = 0;
-	// Re-measuring the strip costs a relayout, so cap it per chart instance —
-	// a loop here would hang the page, and it settles on the first pass anyway.
+	// Labels sit inside the plot, in headroom opened up above the tallest bar by
+	// raising the y-axis max — so they read against the chart without covering data.
+	let laneHeadroom = 0;
+	// Re-fitting the headroom costs a relayout, so cap it per chart instance —
+	// a loop here would hang the page, and it settles in a pass or two.
 	let laneFits = 0;
 	const markerPlugin = {
 		id: 'eventMarkers',
@@ -50,84 +50,101 @@
 			const px = (d: string) => x.getPixelForValue(new Date(`${d}T12:00:00`).getTime());
 			const FONT = '10px JetBrains Mono';
 			const GAP = 10;
-
-			// Labels sit in lanes in the strip above the plot, so they never cover
-			// the bars. Left-to-right keeps lane assignment stable.
-			const placed: PlacedLabel[] = [];
-			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
-			const stripTop = x.bottom + 5;
+			const TOP = chartArea.top + 4;
 
 			// Backlog grew = bad = red; backlog shrank = good = green (the same green
 			// AI Completed already uses for "done"). Stagnation bands stay neutral.
-			// Both are the light-400 shades: the age ramp's 1-3m band is a dark
-			// crimson (#E11D48), so a mid red rule vanished into it — these separate
-			// on luminance as well as hue, against any band.
+			// Light-400 shades: the age ramp's 1-3m band is a dark crimson (#E11D48),
+			// so a mid red rule vanished into it — these separate on luminance too.
 			const UP = '248, 113, 113';
 			const DOWN = '74, 222, 128';
 			const FLAT = '148, 163, 184';
 
-			/** Horizontal label in the strip, with its rule dropping into the plot. */
-			const drawMarker = (atX: number, label: string, rgb: string, dashed: boolean) => {
-				ctx.font = FONT;
-				const w = ctx.measureText(label).width;
+			ctx.font = FONT;
+			const placed: PlacedLabel[] = [];
+			const ordered = [...markers].sort((a, b) => (a.date < b.date ? -1 : 1));
+
+			// Pass 1: lay the labels out, so pass 2 knows how deep the block goes and
+			// can start every rule below all of them rather than through one.
+			const items: {
+				atX: number;
+				label: string;
+				rgb: string;
+				dashed: boolean;
+				lane: number;
+				left: number;
+			}[] = [];
+			for (const m of ordered) {
+				const isFlat = m.direction === 'flat';
+				const atX = isFlat ? Math.max(px(m.date), chartArea.left) : px(m.date);
+				if (isFlat) {
+					const b = Math.min(px(m.end ?? m.date), chartArea.right);
+					if (b <= chartArea.left || atX >= chartArea.right) continue;
+					ctx.save();
+					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+					ctx.fillRect(atX, chartArea.top, b - atX, chartArea.bottom - chartArea.top);
+					ctx.restore();
+				} else if (atX < chartArea.left || atX > chartArea.right) {
+					continue;
+				}
+				const w = ctx.measureText(m.label).width;
 				const left = Math.max(chartArea.left, Math.min(atX - w / 2, chartArea.right - w));
 				const lane = assignLane(placed, left - GAP, left + w + GAP);
 				placed.push({ lane, left: left - GAP, right: left + w + GAP });
-				const y = stripTop + lane * MARKER_LANE_HEIGHT;
-
-				ctx.save();
-				ctx.strokeStyle = `rgba(${rgb}, 0.65)`;
-				ctx.lineWidth = 1;
-				if (dashed) ctx.setLineDash([4, 4]);
-				ctx.beginPath();
-				ctx.moveTo(atX, chartArea.top);
-				ctx.lineTo(atX, chartArea.bottom);
-				ctx.stroke();
-				ctx.restore();
-
-				// Connector runs only inside the strip, so it never crosses the ticks.
-				ctx.save();
-				ctx.strokeStyle = `rgba(${rgb}, 0.4)`;
-				ctx.lineWidth = 1;
-				ctx.beginPath();
-				ctx.moveTo(atX, stripTop - 4);
-				ctx.lineTo(atX, y + MARKER_LANE_HEIGHT - 3);
-				ctx.stroke();
-				ctx.restore();
-
-				ctx.save();
-				ctx.fillStyle = `rgb(${rgb})`;
-				ctx.font = FONT;
-				ctx.textBaseline = 'top';
-				ctx.fillText(label, left, y);
-				ctx.restore();
-			};
-
-			for (const m of ordered) {
-				if (m.direction === 'flat') {
-					// stagnation band: shaded range with the label at its start
-					const a = Math.max(px(m.date), chartArea.left);
-					const b = Math.min(px(m.end ?? m.date), chartArea.right);
-					if (b <= chartArea.left || a >= chartArea.right) continue;
-					ctx.save();
-					ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
-					ctx.fillRect(a, chartArea.top, b - a, chartArea.bottom - chartArea.top);
-					ctx.restore();
-					drawMarker(a, m.label, FLAT, false);
-					continue;
-				}
-				const p = px(m.date);
-				if (p < chartArea.left || p > chartArea.right) continue;
-				drawMarker(p, m.label, m.direction === 'up' ? UP : DOWN, true);
+				items.push({
+					atX,
+					label: m.label,
+					rgb: isFlat ? FLAT : m.direction === 'up' ? UP : DOWN,
+					dashed: !isFlat,
+					lane,
+					left
+				});
 			}
 
-			// Re-reserve the strip when the lane count changes (zoom, range, resize).
 			const needed = laneStripHeight(placed);
-			if (needed !== laneStrip && laneFits < 3) {
-				laneStrip = needed;
-				laneFits++;
-				c.options.layout.padding.bottom = needed;
-				requestAnimationFrame(() => c.update('none'));
+			const ruleTop = TOP + needed;
+
+			// Pass 2: rules start below the whole label block, so none crosses text.
+			for (const it of items) {
+				ctx.save();
+				ctx.strokeStyle = `rgba(${it.rgb}, 0.65)`;
+				ctx.lineWidth = 1;
+				if (it.dashed) ctx.setLineDash([4, 4]);
+				ctx.beginPath();
+				ctx.moveTo(it.atX, ruleTop);
+				ctx.lineTo(it.atX, chartArea.bottom);
+				ctx.stroke();
+				ctx.restore();
+
+				ctx.save();
+				ctx.fillStyle = `rgb(${it.rgb})`;
+				ctx.font = FONT;
+				ctx.textBaseline = 'top';
+				ctx.fillText(it.label, it.left, TOP + it.lane * MARKER_LANE_HEIGHT);
+				ctx.restore();
+			}
+
+			// Open headroom above the tallest bar by raising the axis max, so the
+			// labels sit on empty chart rather than on the data.
+			const want = needed + 10;
+			const H = chartArea.bottom - chartArea.top;
+			let dataMax = 0;
+			for (const d of dailyCounts) {
+				if (d.date < dateRange.start || d.date > dateRange.end) continue;
+				dataMax = Math.max(dataMax, (d.total as number) ?? 0, averages[d.date] ?? 0);
+			}
+			if (dataMax > 0 && H > want + 20) {
+				// Round up to a clean tick, else the axis tops out on something like
+				// 843 and crowds the tick below it. Also keeps the refit stable.
+				const raw = (dataMax * H) / (H - want);
+				const step = raw >= 200 ? 100 : raw >= 50 ? 20 : 10;
+				const target = Math.ceil(raw / step) * step;
+				if (Math.abs(target - laneHeadroom) > 1 && laneFits < 3) {
+					laneHeadroom = target;
+					laneFits++;
+					c.options.scales.y.max = target;
+					requestAnimationFrame(() => c.update('none'));
+				}
 			}
 		}
 	};
@@ -219,7 +236,6 @@
 				responsive: true,
 				maintainAspectRatio: false,
 				animation: false,
-				layout: { padding: { bottom: 0 } },
 				interaction: {
 					mode: 'index' as const,
 					intersect: false
@@ -301,7 +317,7 @@
 	function rebuildChart() {
 		if (!ChartJS || !canvas) return;
 		chart?.destroy();
-		laneStrip = 0;
+		laneHeadroom = 0;
 		laneFits = 0;
 		chart = new ChartJS(canvas, {
 			...buildConfig(dailyCounts, categories, dateRange),
