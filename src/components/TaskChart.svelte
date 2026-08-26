@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { DayCount } from '$lib/types.js';
+	import type { DayCount, GroupBy } from '$lib/types.js';
 	import { rollingAvgTotals, type FlowBucket } from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
 	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
@@ -16,6 +16,7 @@
 	interface Props {
 		dailyCounts: DayCount[];
 		categories: string[];
+		groupBy: GroupBy;
 		dateRange: { start: string; end: string };
 		tagColors: Record<string, string>;
 		hiddenByDefault?: string[];
@@ -28,6 +29,7 @@
 	let {
 		dailyCounts,
 		categories,
+		groupBy,
 		dateRange,
 		tagColors,
 		hiddenByDefault = [],
@@ -366,9 +368,9 @@
 		chart?.destroy();
 		laneHeadroom = 0;
 		laneFits = 0;
-		// Sync legend memory first (seeded from hiddenByDefault when the category
-		// set changes) so the avg line is built over the surviving categories.
-		syncLegendMemory(categories, hiddenByDefault);
+		// Sync legend memory first (restores this group-by's persisted toggles)
+		// so the avg line is built over the surviving categories.
+		syncLegendMemory(groupBy, hiddenByDefault);
 		averages = visibleAvg();
 		chart = new ChartJS(canvas, {
 			...buildConfig(dailyCounts, categories, dateRange),

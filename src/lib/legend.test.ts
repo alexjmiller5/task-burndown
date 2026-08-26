@@ -1,43 +1,84 @@
-import { describe, it, expect } from 'vitest';
-import { syncHiddenLabels } from './legend.ts';
+import { describe, it, expect, test } from 'vitest';
+import {
+	syncHiddenGroup,
+	syncLegendMemory,
+	recordLegendToggle,
+	hiddenLegendLabels,
+	STORAGE_KEY
+} from './legend.ts';
 
-describe('syncHiddenLabels', () => {
-	it('keeps user toggles when the category set is unchanged (range change)', () => {
+describe('syncHiddenGroup', () => {
+	it('keeps user toggles when the group is unchanged (range change rebuild)', () => {
+		const store: Record<string, string[]> = {};
 		const hidden = new Set<string>();
-		const key = syncHiddenLabels(hidden, null, ['High', 'Low'], []);
+		syncHiddenGroup(store, hidden, null, 'priority', []);
 		hidden.add('High'); // user clicks High off in the legend
-		syncHiddenLabels(hidden, key, ['High', 'Low'], []);
+		syncHiddenGroup(store, hidden, 'priority', 'priority', []);
 		expect(hidden).toEqual(new Set(['High']));
 	});
 
-	it('clears toggles and reseeds defaults when categories change (view switch)', () => {
+	it('seeds defaults on first visit to a group', () => {
+		const store: Record<string, string[]> = {};
 		const hidden = new Set<string>();
-		const key = syncHiddenLabels(hidden, null, ['High', 'Low'], []);
-		hidden.add('High');
-		syncHiddenLabels(hidden, key, ['ProjA', '(No Project)'], ['(No Project)']);
+		syncHiddenGroup(store, hidden, null, 'project', ['(No Project)']);
 		expect(hidden).toEqual(new Set(['(No Project)']));
+		expect(store.project).toEqual(['(No Project)']);
 	});
 
-	it('keep-labels survive a category change', () => {
+	it('restores the saved toggles when switching back to a group', () => {
+		const store: Record<string, string[]> = {};
 		const hidden = new Set<string>();
-		const key = syncHiddenLabels(hidden, null, ['High', 'Low'], [], ['14d avg']);
+		syncHiddenGroup(store, hidden, null, 'priority', []);
 		hidden.add('High');
-		hidden.add('14d avg');
-		syncHiddenLabels(hidden, key, ['<1w', '6m+'], [], ['14d avg']);
-		expect(hidden).toEqual(new Set(['14d avg']));
+		store.priority = [...hidden]; // recordLegendToggle does this in the app
+		syncHiddenGroup(store, hidden, 'priority', 'tag', []);
+		expect(hidden.has('High')).toBe(false);
+		syncHiddenGroup(store, hidden, 'tag', 'priority', []);
+		expect(hidden).toEqual(new Set(['High']));
 	});
 
-	it('seeds defaults on first build', () => {
+	it('does not reseed defaults over a saved set', () => {
+		const store: Record<string, string[]> = { project: [] }; // user re-showed the default
 		const hidden = new Set<string>();
-		syncHiddenLabels(hidden, null, ['ProjA', '(No Project)'], ['(No Project)']);
-		expect(hidden).toEqual(new Set(['(No Project)']));
-	});
-
-	it('a re-shown default stays shown across a range change', () => {
-		const hidden = new Set<string>();
-		const key = syncHiddenLabels(hidden, null, ['ProjA', '(No Project)'], ['(No Project)']);
-		hidden.delete('(No Project)'); // user clicks it back on
-		syncHiddenLabels(hidden, key, ['ProjA', '(No Project)'], ['(No Project)']);
+		syncHiddenGroup(store, hidden, null, 'project', ['(No Project)']);
 		expect(hidden.size).toBe(0);
 	});
+
+	it('keep-labels carry their current state across a group switch', () => {
+		const store: Record<string, string[]> = { age: ['<1w'] };
+		const hidden = new Set<string>();
+		syncHiddenGroup(store, hidden, null, 'priority', [], ['14d avg']);
+		hidden.add('14d avg');
+		syncHiddenGroup(store, hidden, 'priority', 'age', [], ['14d avg']);
+		expect(hidden).toEqual(new Set(['<1w', '14d avg']));
+	});
+
+	it('restores a stored set on first build after a reload', () => {
+		const store: Record<string, string[]> = { priority: ['High', '14d avg'] };
+		const hidden = new Set<string>();
+		syncHiddenGroup(store, hidden, null, 'priority', [], ['14d avg']);
+		expect(hidden).toEqual(new Set(['High', '14d avg']));
+	});
+});
+
+test('syncLegendMemory + recordLegendToggle round-trip through localStorage', () => {
+	const items: Record<string, string> = {
+		[STORAGE_KEY]: JSON.stringify({ priority: ['High'] })
+	};
+	(globalThis as Record<string, unknown>).localStorage = {
+		getItem: (k: string) => (k in items ? items[k] : null),
+		setItem: (k: string, v: string) => {
+			items[k] = v;
+		}
+	};
+	try {
+		syncLegendMemory('priority', []);
+		expect(hiddenLegendLabels).toEqual(new Set(['High']));
+		recordLegendToggle('Low', true);
+		expect(JSON.parse(items[STORAGE_KEY]).priority).toEqual(['High', 'Low']);
+		recordLegendToggle('High', false);
+		expect(JSON.parse(items[STORAGE_KEY]).priority).toEqual(['Low']);
+	} finally {
+		delete (globalThis as Record<string, unknown>).localStorage;
+	}
 });
