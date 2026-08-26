@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { FlowBucket, FlowRow } from '$lib/data/metrics.js';
+	import type { GroupBy } from '$lib/types.js';
 	import { getSeriesColor } from '$lib/colors.js';
 	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import dayjs from 'dayjs';
@@ -9,12 +10,21 @@
 		flows: FlowRow[];
 		bucket: FlowBucket;
 		categories: string[];
+		groupBy: GroupBy;
 		colorMap: Record<string, string>;
 		dateRange: { start: string; end: string };
 		hiddenByDefault?: string[];
 	}
 
-	let { flows, bucket, categories, colorMap, dateRange, hiddenByDefault = [] }: Props = $props();
+	let {
+		flows,
+		bucket,
+		categories,
+		groupBy,
+		colorMap,
+		dateRange,
+		hiddenByDefault = []
+	}: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let chart: any = null;
@@ -175,7 +185,7 @@
 		chart = new ChartJS(canvas, buildConfig());
 		// Restore remembered legend toggles (shared with TaskChart) so they
 		// survive the rebuild.
-		syncLegendMemory(categories, hiddenByDefault);
+		syncLegendMemory(groupBy, hiddenByDefault);
 		if (hiddenLegendLabels.size > 0) {
 			for (let i = 0; i < chart.data.datasets.length; i++) {
 				if (hiddenLegendLabels.has(chart.data.datasets[i].label)) {

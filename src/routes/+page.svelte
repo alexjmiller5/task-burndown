@@ -845,6 +845,7 @@
 						{flows}
 						bucket={flowBucket}
 						{categories}
+						{groupBy}
 						colorMap={chartColors}
 						dateRange={{ start: dateStart, end: dateEnd }}
 						{hiddenByDefault}
@@ -853,6 +854,7 @@
 					<TaskChart
 						dailyCounts={displayCounts}
 						{categories}
+						{groupBy}
 						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
 						tagColors={chartColors}
