@@ -7,7 +7,7 @@
 		type CompletionRow,
 		type FlowBucket
 	} from '$lib/data/metrics.js';
-	import { getSeriesColor } from '$lib/colors.js';
+	import { DONE_COLOR, getSeriesColor, hatch } from '$lib/colors.js';
 	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import {
 		assignLane,
@@ -48,29 +48,6 @@
 		completions = [],
 		showCompleted = false
 	}: Props = $props();
-
-	// Muted tone for the same-day churn cap — deliberately outside every
-	// group-by palette so it reads as "not part of the open backlog".
-	const DONE_COLOR = { bg: 'rgba(203, 213, 225, 0.35)', border: 'rgba(203, 213, 225, 0.9)' };
-
-	// Diagonal-stripe tile marking the same-day cap.
-	function hatch(color: { bg: string; border: string }): CanvasPattern | string {
-		const tile = document.createElement('canvas');
-		tile.width = tile.height = 6;
-		const ctx = tile.getContext('2d');
-		if (!ctx) return color.bg;
-		ctx.strokeStyle = color.border;
-		ctx.lineWidth = 1.2;
-		ctx.beginPath();
-		ctx.moveTo(-1.5, 1.5);
-		ctx.lineTo(1.5, -1.5);
-		ctx.moveTo(-1.5, 7.5);
-		ctx.lineTo(7.5, -1.5);
-		ctx.moveTo(4.5, 7.5);
-		ctx.lineTo(7.5, 4.5);
-		ctx.stroke();
-		return ctx.createPattern(tile, 'repeat') ?? color.bg;
-	}
 
 	// The 14d avg tracks what the legend shows: hidden categories drop out of
 	// the sum. Recomputed on rebuild and on legend clicks; the marker plugin

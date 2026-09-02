@@ -1,20 +1,24 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { CompletionRow, FlowBucket } from '$lib/data/metrics.js';
+	import { DONE_COLOR, hatch } from '$lib/colors.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
 		completions: CompletionRow[];
 		bucket: FlowBucket;
 		dateRange: { start: string; end: string };
+		/** Show same-day churn as hatched extensions on both directions. */
+		showSameDay?: boolean;
 	}
 
-	let { completions, bucket, dateRange }: Props = $props();
+	let { completions, bucket, dateRange, showSameDay = false }: Props = $props();
 
 	// The burndown's rate of change: added (backlog grew) up in the marker
-	// red, completed (backlog shrank) down in the marker green. Same-day
-	// churn lives on the main chart's cap, not here — these two series ARE
-	// the day-over-day delta of the open count.
+	// red, completed (backlog shrank) down in the marker green — these two
+	// series ARE the day-over-day delta of the open count. Same-day churn is
+	// both an add and a completion, so it extends both directions as a
+	// symmetric hatched pair (visibly netting zero).
 	const ADDED = { bg: 'rgba(248, 113, 113, 0.6)', border: 'rgba(248, 113, 113, 1)' };
 	const COMPLETED = { bg: 'rgba(74, 222, 128, 0.6)', border: 'rgba(74, 222, 128, 1)' };
 
@@ -94,7 +98,32 @@
 						borderColor: COMPLETED.border,
 						borderWidth: 1,
 						borderRadius: 2
-					}
+					},
+					// Positive and negative values stack separately by sign, so these
+					// pile onto Added (up) and Completed (down) respectively. The
+					// `mirror` twin is hidden from legend and tooltip to avoid a
+					// duplicate entry; toggling the legend item hides both.
+					...(showSameDay
+						? [
+								{
+									label: 'Same-day',
+									data: completions.map((r) => r.sameDay),
+									backgroundColor: hatch(DONE_COLOR),
+									borderColor: DONE_COLOR.border,
+									borderWidth: 1,
+									borderRadius: 2
+								},
+								{
+									label: 'Same-day',
+									data: completions.map((r) => -r.sameDay),
+									backgroundColor: hatch(DONE_COLOR),
+									borderColor: DONE_COLOR.border,
+									borderWidth: 1,
+									borderRadius: 2,
+									mirror: true
+								}
+							]
+						: [])
 				]
 			},
 			options: {
@@ -112,7 +141,18 @@
 							boxHeight: isMobile ? 10 : 12,
 							padding: isMobile ? 8 : 16,
 							useBorderRadius: true,
-							borderRadius: 2
+							borderRadius: 2,
+							filter: (item: any, data: any) => !data.datasets[item.datasetIndex]?.mirror
+						},
+						onClick: (_e: any, item: any, legend: any) => {
+							const c = legend.chart;
+							const nowHidden = c.isDatasetVisible(item.datasetIndex);
+							for (let i = 0; i < c.data.datasets.length; i++) {
+								if (c.data.datasets[i].label === item.text) {
+									c.setDatasetVisibility(i, !nowHidden);
+								}
+							}
+							c.update();
 						}
 					},
 					tooltip: {
@@ -131,7 +171,7 @@
 						footerFont: { family: 'JetBrains Mono', size: 12, weight: 'bold' as const },
 						padding: 12,
 						cornerRadius: 8,
-						filter: (item: any) => item.raw !== 0,
+						filter: (item: any) => item.raw !== 0 && !item.dataset.mirror,
 						callbacks: {
 							title: (items: any[]) => (items[0] ? formatTitle(items[0].label) : ''),
 							label: (item: any) => `${item.dataset.label}: ${Math.abs(item.raw)}`,
@@ -196,6 +236,7 @@
 		const _c = completions;
 		const _b = bucket;
 		const _m = isMobile;
+		const _s = showSameDay;
 		rebuildChart();
 	});
 
