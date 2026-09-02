@@ -81,20 +81,46 @@
 		};
 	}
 
+	// Diagonal-stripe tile in the category's border color — marks the same-day
+	// portion of a bar without needing a second legend entry per category.
+	function hatch(color: { bg: string; border: string }): CanvasPattern | string {
+		const tile = document.createElement('canvas');
+		tile.width = tile.height = 6;
+		const ctx = tile.getContext('2d');
+		if (!ctx) return color.bg;
+		ctx.strokeStyle = color.border;
+		ctx.lineWidth = 1.2;
+		ctx.beginPath();
+		ctx.moveTo(-1.5, 1.5);
+		ctx.lineTo(1.5, -1.5);
+		ctx.moveTo(-1.5, 7.5);
+		ctx.lineTo(7.5, -1.5);
+		ctx.moveTo(4.5, 7.5);
+		ctx.lineTo(7.5, 4.5);
+		ctx.stroke();
+		return ctx.createPattern(tile, 'repeat') ?? color.bg;
+	}
+
 	function buildConfig() {
-		// One dataset per category and direction; created stacks up, completed down.
+		// Two datasets per category in one upward stack: solid = backlog
+		// completions, hatched = created-and-completed the same day.
 		const datasets = categories.flatMap((cat, i) => {
 			const color = getSeriesColor(cat, colorMap, i);
 			const base = {
 				label: cat,
-				backgroundColor: color.bg,
+				stack: 'completed',
 				borderColor: color.border,
 				borderWidth: 1,
 				borderRadius: 2
 			};
 			return [
-				{ ...base, stack: 'created', data: flows.map((f) => f.created[cat] ?? 0) },
-				{ ...base, stack: 'completed', data: flows.map((f) => -(f.completed[cat] ?? 0)) }
+				{ ...base, backgroundColor: color.bg, data: flows.map((f) => f.completed[cat] ?? 0) },
+				{
+					...base,
+					backgroundColor: hatch(color),
+					sameDay: true,
+					data: flows.map((f) => f.sameDay[cat] ?? 0)
+				}
 			];
 		});
 		return {
@@ -116,9 +142,8 @@
 							padding: isMobile ? 8 : 16,
 							useBorderRadius: true,
 							borderRadius: 2,
-							// One entry per category — toggling it hides both directions
-							filter: (item: any, data: any) =>
-								data.datasets[item.datasetIndex]?.stack === 'created'
+							// One entry per category — toggling it hides both portions
+							filter: (item: any, data: any) => !data.datasets[item.datasetIndex]?.sameDay
 						},
 						onClick: (_e: any, item: any, legend: any) => {
 							const c = legend.chart;
@@ -152,11 +177,11 @@
 						callbacks: {
 							title: (items: any[]) => (items[0] ? formatTitle(items[0].label) : ''),
 							label: (item: any) =>
-								`${item.raw > 0 ? 'Created' : 'Completed'} · ${item.dataset.label}: ${Math.abs(item.raw)}`,
+								`${item.dataset.sameDay ? 'Same-day' : 'Backlog'} · ${item.dataset.label}: ${item.raw}`,
 							footer: (items: any[]) => {
-								const created = items.reduce((s, i) => s + Math.max(0, i.raw), 0);
-								const completed = items.reduce((s, i) => s + Math.max(0, -i.raw), 0);
-								return `Created: ${created} · Completed: ${completed}`;
+								const total = items.reduce((s, i) => s + i.raw, 0);
+								const sameDay = items.reduce((s, i) => s + (i.dataset.sameDay ? i.raw : 0), 0);
+								return `Completed: ${total} · ${sameDay} same-day`;
 							}
 						}
 					}
@@ -169,8 +194,7 @@
 						ticks: {
 							color: '#94A3B8',
 							font: { family: 'JetBrains Mono', size: 10 },
-							precision: 0,
-							callback: (v: number) => Math.abs(v)
+							precision: 0
 						},
 						border: { display: false }
 					}
