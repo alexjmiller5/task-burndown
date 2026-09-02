@@ -10,6 +10,12 @@ export interface CompletionRow {
 	backlog: number;
 	/** Completions of tasks whose effective start was the completion day itself. */
 	sameDay: number;
+	/**
+	 * Tasks that joined the open pile: effective start in this bucket, minus the
+	 * same-day turnarounds (which never sat in the backlog). Keeps the
+	 * arithmetic honest: Δ backlog = added − backlog completions.
+	 */
+	added: number;
 }
 
 export function bucketLabel(dateStr: string, bucket: FlowBucket): string {
@@ -44,17 +50,21 @@ export function calculateCompletions(
 	let label = bucketLabel(start, bucket);
 	const lastLabel = bucketLabel(end, bucket);
 	while (label <= lastLabel) {
-		rows.set(label, { label, backlog: 0, sameDay: 0 });
+		rows.set(label, { label, backlog: 0, sameDay: 0, added: 0 });
 		label = nextBucket(label, bucket);
 	}
 
 	for (const task of tasks) {
-		if (!task.completed) continue;
-		const dateStr = toLocalDateStr(task.completed, tz);
-		if (dateStr < start || dateStr > end) continue;
-		const row = rows.get(bucketLabel(dateStr, bucket));
-		if (!row) continue;
-		row[getTaskStartDate(task, tz) === dateStr ? 'sameDay' : 'backlog'] += 1;
+		const startStr = getTaskStartDate(task, tz);
+		const doneStr = task.completed ? toLocalDateStr(task.completed, tz) : null;
+		if (startStr >= start && startStr <= end && doneStr !== startStr) {
+			const row = rows.get(bucketLabel(startStr, bucket));
+			if (row) row.added += 1;
+		}
+		if (doneStr && doneStr >= start && doneStr <= end) {
+			const row = rows.get(bucketLabel(doneStr, bucket));
+			if (row) row[doneStr === startStr ? 'sameDay' : 'backlog'] += 1;
+		}
 	}
 	return Array.from(rows.values());
 }

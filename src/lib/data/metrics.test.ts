@@ -38,9 +38,9 @@ test('calculateCompletions buckets completions by day, zero-filled', () => {
 	];
 	const rows = calculateCompletions(tasks, 'America/New_York', 'day', '2026-07-01', '2026-07-03');
 	expect(rows).toEqual([
-		{ label: '2026-07-01', backlog: 0, sameDay: 0 },
-		{ label: '2026-07-02', backlog: 1, sameDay: 0 },
-		{ label: '2026-07-03', backlog: 1, sameDay: 0 }
+		{ label: '2026-07-01', backlog: 0, sameDay: 0, added: 2 },
+		{ label: '2026-07-02', backlog: 1, sameDay: 0, added: 0 },
+		{ label: '2026-07-03', backlog: 1, sameDay: 0, added: 0 }
 	]);
 });
 
@@ -50,7 +50,7 @@ test('calculateCompletions splits out tasks created and completed the same day',
 		makeTask({ id: 'slow', created: '2026-06-01T12:00:00.000Z', completed: '2026-07-01' })
 	];
 	const rows = calculateCompletions(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01');
-	expect(rows).toEqual([{ label: '2026-07-01', backlog: 1, sameDay: 1 }]);
+	expect(rows).toEqual([{ label: '2026-07-01', backlog: 1, sameDay: 1, added: 0 }]);
 });
 
 test('calculateCompletions counts a deferred task finished early as same-day (clamped start)', () => {
@@ -64,7 +64,7 @@ test('calculateCompletions counts a deferred task finished early as same-day (cl
 		})
 	];
 	const rows = calculateCompletions(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01');
-	expect(rows).toEqual([{ label: '2026-07-01', backlog: 0, sameDay: 1 }]);
+	expect(rows).toEqual([{ label: '2026-07-01', backlog: 0, sameDay: 1, added: 0 }]);
 });
 
 test('calculateCompletions — a backfilled task completed on entry is backlog, not same-day', () => {
@@ -77,7 +77,7 @@ test('calculateCompletions — a backfilled task completed on entry is backlog, 
 		completed: '2026-08-23'
 	});
 	const rows = calculateCompletions([task], 'America/New_York', 'day', '2026-08-23', '2026-08-23');
-	expect(rows).toEqual([{ label: '2026-08-23', backlog: 1, sameDay: 0 }]);
+	expect(rows).toEqual([{ label: '2026-08-23', backlog: 1, sameDay: 0, added: 0 }]);
 });
 
 test('calculateCompletions week buckets start on Monday', () => {
@@ -87,8 +87,8 @@ test('calculateCompletions week buckets start on Monday', () => {
 	];
 	const rows = calculateCompletions(tasks, 'UTC', 'week', '2026-07-06', '2026-07-19');
 	expect(rows).toEqual([
-		{ label: '2026-07-06', backlog: 1, sameDay: 0 },
-		{ label: '2026-07-13', backlog: 1, sameDay: 0 }
+		{ label: '2026-07-06', backlog: 1, sameDay: 0, added: 0 },
+		{ label: '2026-07-13', backlog: 1, sameDay: 0, added: 0 }
 	]);
 });
 
@@ -100,10 +100,23 @@ test('calculateCompletions month buckets answer "how many did I finish in July"'
 	];
 	const rows = calculateCompletions(tasks, 'UTC', 'month', '2026-06-15', '2026-08-10');
 	expect(rows).toEqual([
-		{ label: '2026-06', backlog: 0, sameDay: 0 },
-		{ label: '2026-07', backlog: 1, sameDay: 1 },
-		{ label: '2026-08', backlog: 1, sameDay: 0 }
+		{ label: '2026-06', backlog: 0, sameDay: 0, added: 0 },
+		{ label: '2026-07', backlog: 1, sameDay: 1, added: 0 },
+		{ label: '2026-08', backlog: 1, sameDay: 0, added: 0 }
 	]);
+});
+
+test('calculateCompletions counts tasks added to the backlog, excluding same-day churn', () => {
+	const tasks = [
+		makeTask({ id: 'open', created: '2026-07-01T12:00:00.000Z' }), // joins the pile
+		makeTask({ id: 'later', created: '2026-07-01T15:00:00.000Z', completed: '2026-07-05' }),
+		makeTask({ id: 'churn', created: '2026-07-01T18:00:00.000Z', completed: '2026-07-01' }),
+		makeTask({ id: 'due', created: '2026-05-01T12:00:00.000Z', dueDate: '2026-07-02' }) // becomes due = added
+	];
+	const rows = calculateCompletions(tasks, 'UTC', 'day', '2026-07-01', '2026-07-05');
+	expect(rows[0]).toEqual({ label: '2026-07-01', backlog: 0, sameDay: 1, added: 2 });
+	expect(rows[1]).toEqual({ label: '2026-07-02', backlog: 0, sameDay: 0, added: 1 });
+	expect(rows[4]).toEqual({ label: '2026-07-05', backlog: 1, sameDay: 0, added: 0 });
 });
 
 test('sampleDailyCounts keeps the last day of each week bucket', () => {
