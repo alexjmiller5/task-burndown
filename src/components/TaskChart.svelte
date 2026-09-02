@@ -323,6 +323,10 @@
 									borderColor: DONE_COLOR.border,
 									borderWidth: 1,
 									borderRadius: 2,
+									// Distinct stack ids: the y axis is stacked, and floating
+									// [base, top] segments sharing a stack get offset by each
+									// other's values — the hatched block would drift into the sky.
+									stack: 'done-backlog',
 									grouped: false,
 									barPercentage: 0.45,
 									isCompletion: true
@@ -334,6 +338,7 @@
 									borderColor: DONE_COLOR.border,
 									borderWidth: 1,
 									borderRadius: 2,
+									stack: 'done-sameday',
 									grouped: false,
 									barPercentage: 0.45,
 									isCompletion: true
