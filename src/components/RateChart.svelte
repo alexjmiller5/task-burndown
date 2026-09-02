@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { CompletionRow, FlowBucket } from '$lib/data/metrics.js';
 	import { DONE_COLOR, hatch } from '$lib/colors.js';
+	import { createMarkerPlugin, type ChartMarker } from '$lib/markers.js';
 	import dayjs from 'dayjs';
 
 	interface Props {
@@ -10,15 +11,23 @@
 		dateRange: { start: string; end: string };
 		/** Show same-day churn as hatched extensions on both directions. */
 		showSameDay?: boolean;
+		markers?: ChartMarker[];
 	}
 
-	let { completions, bucket, dateRange, showSameDay = false }: Props = $props();
+	let { completions, bucket, dateRange, showSameDay = false, markers = [] }: Props = $props();
+
+	// Labels must clear the tallest upward bar: added plus its same-day
+	// half-height base.
+	const markerPlugin = createMarkerPlugin(
+		() => markers,
+		() => Math.max(0, ...completions.map((r) => r.added + (showSameDay ? r.sameDay / 2 : 0)))
+	);
 
 	// The burndown's rate of change: added (backlog grew) up in the marker
 	// red, completed (backlog shrank) down in the marker green — these two
 	// series ARE the day-over-day delta of the open count. Same-day churn is
-	// both an add and a completion, so it extends both directions as a
-	// symmetric hatched pair (visibly netting zero).
+	// both an add and a completion, so it appears once as a hatched block
+	// straddling the zero line (visibly netting zero).
 	const ADDED = { bg: 'rgba(248, 113, 113, 0.6)', border: 'rgba(248, 113, 113, 1)' };
 	const COMPLETED = { bg: 'rgba(74, 222, 128, 0.6)', border: 'rgba(74, 222, 128, 1)' };
 
@@ -208,7 +217,8 @@
 	function rebuildChart() {
 		if (!ChartJS || !canvas) return;
 		chart?.destroy();
-		chart = new ChartJS(canvas, buildConfig());
+		markerPlugin.reset();
+		chart = new ChartJS(canvas, { ...buildConfig(), plugins: [markerPlugin] });
 	}
 
 	onMount(async () => {
@@ -240,6 +250,7 @@
 		const _b = bucket;
 		const _m = isMobile;
 		const _s = showSameDay;
+		const _mk = markers;
 		rebuildChart();
 	});
 
