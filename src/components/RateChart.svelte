@@ -31,6 +31,16 @@
 		isMobile = 'matches' in e ? e.matches : false;
 	}
 
+	// Tooltip helper: floating bars' raw is a [base, end] pair, so read the
+	// real count off the completions row by series name.
+	function rowValue(item: { dataIndex: number; dataset: { label?: string } }): number {
+		const r = completions[item.dataIndex];
+		if (!r) return 0;
+		if (item.dataset.label === 'Added') return r.added;
+		if (item.dataset.label === 'Completed') return r.backlog;
+		return r.sameDay;
+	}
+
 	function formatTitle(dateish: string | number): string {
 		if (bucket === 'month') return dayjs(`${dateish}-01`).format('MMM YYYY');
 		if (bucket === 'week') return `Week of ${dayjs(dateish).format('MMM D')}`;
@@ -78,6 +88,16 @@
 	}
 
 	function buildConfig() {
+		// Same-day churn appears ONCE, straddling the zero line: added floats on
+		// top of it, completed hangs below it. Both solid bars shift outward by
+		// the same half-height, so top-end vs bottom-end still reads the exact
+		// net; the hatched middle is the churn that never touched the backlog.
+		// Every dataset is a floating [base, end] bar with grouped: false so all
+		// three share one full-width column (no stacking arithmetic — see the
+		// TaskChart floating-bar lesson).
+		const half = (r: CompletionRow) => (showSameDay ? r.sameDay / 2 : 0);
+		const seg = (from: number, to: number): [number, number] | null =>
+			from === to ? null : [from, to];
 		return {
 			type: 'bar' as const,
 			data: {
@@ -85,42 +105,35 @@
 				datasets: [
 					{
 						label: 'Added',
-						data: completions.map((r) => r.added),
+						data: completions.map((r) => seg(half(r), half(r) + r.added)),
 						backgroundColor: ADDED.bg,
 						borderColor: ADDED.border,
 						borderWidth: 1,
-						borderRadius: 2
+						borderRadius: 2,
+						grouped: false
 					},
 					{
 						label: 'Completed',
-						data: completions.map((r) => -r.backlog),
+						data: completions.map((r) => seg(-half(r) - r.backlog, -half(r))),
 						backgroundColor: COMPLETED.bg,
 						borderColor: COMPLETED.border,
 						borderWidth: 1,
-						borderRadius: 2
+						borderRadius: 2,
+						grouped: false
 					},
-					// Positive and negative values stack separately by sign, so these
-					// pile onto Added (up) and Completed (down) respectively. The
-					// `mirror` twin is hidden from legend and tooltip to avoid a
-					// duplicate entry; toggling the legend item hides both.
 					...(showSameDay
 						? [
 								{
 									label: 'Same-day',
-									data: completions.map((r) => r.sameDay),
-									backgroundColor: hatch(DONE_COLOR),
-									borderColor: DONE_COLOR.border,
-									borderWidth: 1,
-									borderRadius: 2
-								},
-								{
-									label: 'Same-day',
-									data: completions.map((r) => -r.sameDay),
+									data: completions.map((r) => seg(-r.sameDay / 2, r.sameDay / 2)),
 									backgroundColor: hatch(DONE_COLOR),
 									borderColor: DONE_COLOR.border,
 									borderWidth: 1,
 									borderRadius: 2,
-									mirror: true
+									grouped: false,
+									// The chip is the toggle; a legend toggle couldn't re-base
+									// the other two bars, so keep it out of the legend.
+									legendHide: true
 								}
 							]
 						: [])
@@ -142,17 +155,7 @@
 							padding: isMobile ? 8 : 16,
 							useBorderRadius: true,
 							borderRadius: 2,
-							filter: (item: any, data: any) => !data.datasets[item.datasetIndex]?.mirror
-						},
-						onClick: (_e: any, item: any, legend: any) => {
-							const c = legend.chart;
-							const nowHidden = c.isDatasetVisible(item.datasetIndex);
-							for (let i = 0; i < c.data.datasets.length; i++) {
-								if (c.data.datasets[i].label === item.text) {
-									c.setDatasetVisibility(i, !nowHidden);
-								}
-							}
-							c.update();
+							filter: (item: any, data: any) => !data.datasets[item.datasetIndex]?.legendHide
 						}
 					},
 					tooltip: {
@@ -171,10 +174,11 @@
 						footerFont: { family: 'JetBrains Mono', size: 12, weight: 'bold' as const },
 						padding: 12,
 						cornerRadius: 8,
-						filter: (item: any) => item.raw !== 0 && !item.dataset.mirror,
+						// Floating [base, end] bars: read the true value off the row, not raw
+						filter: (item: any) => rowValue(item) > 0,
 						callbacks: {
 							title: (items: any[]) => (items[0] ? formatTitle(items[0].label) : ''),
-							label: (item: any) => `${item.dataset.label}: ${Math.abs(item.raw)}`,
+							label: (item: any) => `${item.dataset.label}: ${rowValue(item)}`,
 							footer: (items: any[]) => {
 								if (!items[0]) return '';
 								const r = completions[items[0].dataIndex];
@@ -187,7 +191,6 @@
 				scales: {
 					x: xAxis(),
 					y: {
-						stacked: true,
 						grid: { color: 'rgba(30, 41, 59, 0.3)', lineWidth: 0.5 },
 						ticks: {
 							color: '#94A3B8',
