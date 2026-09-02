@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Task, DayCount, GroupBy } from '$lib/types.js';
+	import type { Task, DayCount, GroupBy, ChartMode } from '$lib/types.js';
 	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
@@ -20,6 +20,7 @@
 	import { MARKERS } from '$lib/markers.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
+	import RateChart from '../components/RateChart.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import RangeSlider from '../components/RangeSlider.svelte';
@@ -78,8 +79,13 @@
 	let showLegacyTags: boolean = $state(false);
 	let groupBy: GroupBy = $state('tag');
 	let showCompleted: boolean = $state(true);
+	let chartMode: ChartMode = $state('active');
 	let flowBucket: FlowBucket = $state('day');
 
+	const CHART_MODES: { value: ChartMode; label: string }[] = [
+		{ value: 'active', label: 'Active' },
+		{ value: 'rate', label: 'Rate' }
+	];
 	const FLOW_BUCKETS: { value: FlowBucket; label: string }[] = [
 		{ value: 'day', label: 'Day' },
 		{ value: 'week', label: 'Week' },
@@ -90,6 +96,7 @@
 	const ICONS = {
 		range:
 			'M6.75 2.994v2.25m10.5-2.25v2.25m-14.252 13.5V7.491a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v11.251m-18 0a2.25 2.25 0 0 0 2.25 2.25h13.5a2.25 2.25 0 0 0 2.25-2.25m-18 0v-7.5a2.25 2.25 0 0 1 2.25-2.25h13.5a2.25 2.25 0 0 1 2.25 2.25v7.5m-6.75-6h2.25m-9 2.25h4.5m.002-2.25h.005v.006H12v-.006Zm-.001 4.5h.006v.006h-.006v-.005Zm-2.25.001h.005v.006H9.75v-.006Zm-2.25 0h.005v.005h-.006v-.005Zm6.75-2.247h.005v.005h-.005v-.005Zm0 2.247h.006v.006h-.006v-.006Zm2.25-2.248h.006V15H16.5v-.005Z',
+		mode: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z',
 		group:
 			'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
 		bucket:
@@ -267,11 +274,13 @@
 		const marks = showMarkers;
 		const grp = groupBy;
 		const done = showCompleted;
+		const mode = chartMode;
 		if (!prefsLoaded) return;
 		savePreferences({
 			version: 1,
 			timezone: tz,
 			groupBy: grp,
+			chartMode: mode,
 			showLegacyTags: legacy,
 			includeProjectTasks: projects,
 			includeCanceled: canceled,
@@ -468,6 +477,7 @@
 			includeCanceled = stored.includeCanceled ?? false;
 			showMarkers = stored.showMarkers ?? true;
 			showCompleted = stored.showCompleted ?? true;
+			chartMode = stored.chartMode ?? 'active';
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
 				const range = getPresetRange(stored.preset, stored.timezone);
@@ -647,6 +657,22 @@
 
 				<Select.Root
 					type="single"
+					value={chartMode}
+					onValueChange={(v) => (chartMode = v as ChartMode)}
+				>
+					<Select.Trigger class={TRIGGER_CLASS} title="Chart mode">
+						{@render controlIcon(ICONS.mode)}
+						<span>{CHART_MODES.find((m) => m.value === chartMode)?.label}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
+						{#each CHART_MODES as mode}
+							<Select.Item value={mode.value} label={mode.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+
+				<Select.Root
+					type="single"
 					value={flowBucket}
 					onValueChange={(v) => (flowBucket = v as FlowBucket)}
 				>
@@ -772,7 +798,7 @@
 					style={showCompleted
 						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
 						: 'border-color: var(--color-border-default); background: transparent;'}
-					title="Overlay completed-per-bucket bars (hatched = created and completed the same day)"
+					title="Cap each bar with the day's same-day tasks (created and completed that day — invisible to the open count)"
 				>
 					<div
 						class="size-1.5 rounded-full transition-colors duration-150"
@@ -783,7 +809,7 @@
 					<span
 						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
 						style="color: {showCompleted ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-						>Done</span
+						>Same-day</span
 					>
 				</Button>
 			</div>
@@ -839,19 +865,27 @@
 			<div
 				class="order-1 sm:order-3 flex-1 min-h-0 sm:flex-none sm:h-[var(--chart-height-tablet)] lg:h-[var(--chart-height-desktop)]"
 			>
-				<TaskChart
-					dailyCounts={displayCounts}
-					{categories}
-					{groupBy}
-					bucket={flowBucket}
-					dateRange={{ start: dateStart, end: dateEnd }}
-					tagColors={chartColors}
-					{hiddenByDefault}
-					avgSource={dailyCounts}
-					markers={showMarkers ? MARKERS : []}
-					{completions}
-					{showCompleted}
-				/>
+				{#if chartMode === 'rate'}
+					<RateChart
+						{completions}
+						bucket={flowBucket}
+						dateRange={{ start: dateStart, end: dateEnd }}
+					/>
+				{:else}
+					<TaskChart
+						dailyCounts={displayCounts}
+						{categories}
+						{groupBy}
+						bucket={flowBucket}
+						dateRange={{ start: dateStart, end: dateEnd }}
+						tagColors={chartColors}
+						{hiddenByDefault}
+						avgSource={dailyCounts}
+						markers={showMarkers ? MARKERS : []}
+						{completions}
+						{showCompleted}
+					/>
+				{/if}
 			</div>
 		{/if}
 	</div>

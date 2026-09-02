@@ -49,12 +49,11 @@
 		showCompleted = false
 	}: Props = $props();
 
-	// Muted single tone for the completion overlay — category detail stays in
-	// the stacked area; these bars only answer "how much went out, how much of
-	// it was same-day churn".
+	// Muted tone for the same-day churn cap — deliberately outside every
+	// group-by palette so it reads as "not part of the open backlog".
 	const DONE_COLOR = { bg: 'rgba(203, 213, 225, 0.35)', border: 'rgba(203, 213, 225, 0.9)' };
 
-	// Diagonal-stripe tile marking the same-day portion of the overlay bars.
+	// Diagonal-stripe tile marking the same-day cap.
 	function hatch(color: { bg: string; border: string }): CanvasPattern | string {
 		const tile = document.createElement('canvas');
 		tile.width = tile.height = 6;
@@ -89,9 +88,9 @@
 	// Labels sit inside the plot, in headroom opened up above the tallest bar by
 	// raising the y-axis max — so they read against the chart without covering data.
 	let laneHeadroom = 0;
-	// Top of the tallest completion overlay bar (y units), so the marker-label
-	// headroom accounts for the bars poking above the stacks.
-	let chimneyTop = 0;
+	// Top of the tallest stack including its same-day cap, so the marker-label
+	// headroom accounts for the cap poking above the open-task total.
+	let capTop = 0;
 	// Re-fitting the headroom costs a relayout, so cap it per chart instance —
 	// a loop here would hang the page, and it settles in a pass or two.
 	let laneFits = 0;
@@ -202,7 +201,7 @@
 			// labels sit on empty chart rather than on the data.
 			const want = needed + 10;
 			const H = chartArea.bottom - chartArea.top;
-			let dataMax = chimneyTop;
+			let dataMax = capTop;
 			for (const d of dailyCounts) {
 				if (d.date < dateRange.start || d.date > dateRange.end) continue;
 				dataMax = Math.max(dataMax, (d.total as number) ?? 0, averages[d.date] ?? 0);
@@ -278,22 +277,10 @@
 		// bucket its date falls in, so week/month views line up too).
 		const compByLabel = new Map(completions.map((r) => [r.label, r]));
 		const comp = visible.map((d) => compByLabel.get(bucketLabel(d.date, bucket)));
-		// The overlay bars sit on top of each day's stack (floating [base, top]
-		// segments in y units), scaled so the tallest fills ~a quarter of the
-		// plot. Base = the *visible* categories' total, so legend toggles don't
-		// leave the bars hovering; a legend click triggers a rebuild (below).
-		const compMax = Math.max(1, ...comp.map((c) => (c ? c.backlog + c.sameDay : 0)));
-		const visCats = cats.filter((c) => !hiddenLegendLabels.has(c));
-		const visTotal = visible.map((d) => visCats.reduce((s, c) => s + ((d[c] as number) || 0), 0));
-		const dataMax = Math.max(1, ...visTotal);
-		const yPerComp = (dataMax * 0.25) / compMax;
-		chimneyTop = 0;
-		const floatSeg = (i: number, from: number, len: number): [number, number] => {
-			const base = visTotal[i] + from * yPerComp;
-			const top = base + len * yPerComp;
-			chimneyTop = Math.max(chimneyTop, top);
-			return [base, top];
-		};
+		// Tallest stack including the same-day cap, for the marker headroom math.
+		capTop = showCompleted
+			? Math.max(0, ...visible.map((d, i) => ((d.total as number) || 0) + (comp[i]?.sameDay ?? 0)))
+			: 0;
 		return {
 			type: 'bar' as const,
 			data: {
@@ -312,39 +299,6 @@
 						tension: 0.3,
 						spanGaps: true
 					},
-					// Completion overlay (drawn over the category bars, under the avg
-					// line): solid = backlog completions, hatched = same-day churn.
-					...(showCompleted
-						? [
-								{
-									label: 'Completed',
-									data: comp.map((c, i) => floatSeg(i, 0, c?.backlog ?? 0)),
-									backgroundColor: DONE_COLOR.bg,
-									borderColor: DONE_COLOR.border,
-									borderWidth: 1,
-									borderRadius: 2,
-									// Distinct stack ids: the y axis is stacked, and floating
-									// [base, top] segments sharing a stack get offset by each
-									// other's values — the hatched block would drift into the sky.
-									stack: 'done-backlog',
-									grouped: false,
-									barPercentage: 0.45,
-									isCompletion: true
-								},
-								{
-									label: 'Same-day',
-									data: comp.map((c, i) => floatSeg(i, c?.backlog ?? 0, c?.sameDay ?? 0)),
-									backgroundColor: hatch(DONE_COLOR),
-									borderColor: DONE_COLOR.border,
-									borderWidth: 1,
-									borderRadius: 2,
-									stack: 'done-sameday',
-									grouped: false,
-									barPercentage: 0.45,
-									isCompletion: true
-								}
-							]
-						: []),
 					...cats.map((cat, i) => {
 						const color = getSeriesColor(cat, tagColors, i);
 						return {
@@ -356,7 +310,25 @@
 							borderRadius: 2,
 							stack: 'stack0'
 						};
-					})
+					}),
+					// Same-day churn cap: tasks created AND completed the same day are
+					// invisible to the open count (they net zero), so they get a
+					// full-width hatched segment stacked on top of the bar at true
+					// 1:1 scale — the only place the chart can show they existed.
+					...(showCompleted
+						? [
+								{
+									label: 'Same-day',
+									data: comp.map((c) => c?.sameDay ?? 0),
+									backgroundColor: hatch(DONE_COLOR),
+									borderColor: DONE_COLOR.border,
+									borderWidth: 1,
+									borderRadius: 2,
+									stack: 'stack0',
+									isCompletion: true
+								}
+							]
+						: [])
 				]
 			},
 			options: {
@@ -454,15 +426,6 @@
 							font: { family: 'JetBrains Mono', size: 10 }
 						},
 						border: { display: false }
-					},
-					// Hidden axis for the completion overlay, scaled so its tallest
-					// bar sits at ~1/4 of the plot height.
-					y2: {
-						display: false,
-						beginAtZero: true,
-						stacked: true,
-						position: 'right' as const,
-						max: compMax * 4
 					}
 				}
 			}

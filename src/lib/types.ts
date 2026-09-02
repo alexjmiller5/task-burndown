@@ -23,6 +23,7 @@ export interface Task {
 }
 
 export type DueDateCategory = 'Future' | 'Overdue' | 'Undated';
+export type ChartMode = 'active' | 'rate';
 export type GroupBy = 'tag' | 'priority' | 'project' | 'age' | 'ai';
 
 export interface DayCount {
