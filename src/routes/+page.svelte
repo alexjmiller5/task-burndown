@@ -871,6 +871,7 @@
 						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
 						showSameDay={showCompleted}
+						markers={showMarkers ? MARKERS : []}
 					/>
 				{:else}
 					<TaskChart
