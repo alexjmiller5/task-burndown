@@ -24,7 +24,6 @@ export interface Task {
 
 export type DueDateCategory = 'Future' | 'Overdue' | 'Undated';
 export type GroupBy = 'tag' | 'priority' | 'project' | 'age' | 'ai';
-export type ChartMode = 'active' | 'flow';
 
 export interface DayCount {
 	date: string;

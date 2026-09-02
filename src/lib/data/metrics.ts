@@ -1,18 +1,18 @@
-import type { DayCount, GroupBy, Task } from '$lib/types.js';
-import { getGroupKeys, getTaskStartDate } from './calculator.ts';
+import type { DayCount, Task } from '$lib/types.js';
+import { getTaskStartDate } from './calculator.ts';
 import { addDays, diffDays, toLocalDateStr } from './timezone.ts';
 
 export type FlowBucket = 'day' | 'week' | 'month';
 
-export interface FlowRow {
+export interface CompletionRow {
 	label: string;
 	/** Completions of tasks that started on an earlier day (backlog burndown). */
-	completed: Record<string, number>;
+	backlog: number;
 	/** Completions of tasks whose effective start was the completion day itself. */
-	sameDay: Record<string, number>;
+	sameDay: number;
 }
 
-function bucketLabel(dateStr: string, bucket: FlowBucket): string {
+export function bucketLabel(dateStr: string, bucket: FlowBucket): string {
 	if (bucket === 'day') return dateStr;
 	if (bucket === 'month') return dateStr.slice(0, 7);
 	// week starting Monday
@@ -31,23 +31,20 @@ function nextBucket(label: string, bucket: FlowBucket): string {
 /**
  * Completion counts per bucket covering [start, end], zero-filled, split into
  * backlog completions vs same-day turnaround (effective start = completion
- * day), and broken down by the group keys each task had on the completion day
- * (a multi-tag task counts under each tag, mirroring the chart's stacking
- * semantics).
+ * day — the churn the burndown nets to zero).
  */
-export function calculateFlows(
+export function calculateCompletions(
 	tasks: Task[],
 	tz: string,
 	bucket: FlowBucket,
 	start: string,
-	end: string,
-	groupBy: GroupBy
-): FlowRow[] {
-	const rows = new Map<string, FlowRow>();
+	end: string
+): CompletionRow[] {
+	const rows = new Map<string, CompletionRow>();
 	let label = bucketLabel(start, bucket);
 	const lastLabel = bucketLabel(end, bucket);
 	while (label <= lastLabel) {
-		rows.set(label, { label, completed: {}, sameDay: {} });
+		rows.set(label, { label, backlog: 0, sameDay: 0 });
 		label = nextBucket(label, bucket);
 	}
 
@@ -57,10 +54,7 @@ export function calculateFlows(
 		if (dateStr < start || dateStr > end) continue;
 		const row = rows.get(bucketLabel(dateStr, bucket));
 		if (!row) continue;
-		const side = getTaskStartDate(task, tz) === dateStr ? 'sameDay' : 'completed';
-		for (const key of getGroupKeys(task, groupBy, dateStr, tz)) {
-			row[side][key] = (row[side][key] ?? 0) + 1;
-		}
+		row[getTaskStartDate(task, tz) === dateStr ? 'sameDay' : 'backlog'] += 1;
 	}
 	return Array.from(rows.values());
 }

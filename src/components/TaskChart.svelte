@@ -1,7 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { DayCount, GroupBy } from '$lib/types.js';
-	import { rollingAvgTotals, type FlowBucket } from '$lib/data/metrics.js';
+	import {
+		bucketLabel,
+		rollingAvgTotals,
+		type CompletionRow,
+		type FlowBucket
+	} from '$lib/data/metrics.js';
 	import { getSeriesColor } from '$lib/colors.js';
 	import { hiddenLegendLabels, recordLegendToggle, syncLegendMemory } from '$lib/legend.js';
 	import {
@@ -24,6 +29,10 @@
 		/** Full (non-downsampled) daily series the 14d avg is computed from. */
 		avgSource?: DayCount[];
 		markers?: ChartMarker[];
+		/** Per-bucket completion counts (backlog vs same-day) for the overlay + tooltip. */
+		completions?: CompletionRow[];
+		/** Draw the completion bars; the tooltip footer shows completions regardless. */
+		showCompleted?: boolean;
 	}
 
 	let {
@@ -35,8 +44,34 @@
 		hiddenByDefault = [],
 		bucket = 'day',
 		avgSource = [],
-		markers = []
+		markers = [],
+		completions = [],
+		showCompleted = false
 	}: Props = $props();
+
+	// Muted single tone for the completion overlay — category detail stays in
+	// the stacked area; these bars only answer "how much went out, how much of
+	// it was same-day churn".
+	const DONE_COLOR = { bg: 'rgba(203, 213, 225, 0.35)', border: 'rgba(203, 213, 225, 0.9)' };
+
+	// Diagonal-stripe tile marking the same-day portion of the overlay bars.
+	function hatch(color: { bg: string; border: string }): CanvasPattern | string {
+		const tile = document.createElement('canvas');
+		tile.width = tile.height = 6;
+		const ctx = tile.getContext('2d');
+		if (!ctx) return color.bg;
+		ctx.strokeStyle = color.border;
+		ctx.lineWidth = 1.2;
+		ctx.beginPath();
+		ctx.moveTo(-1.5, 1.5);
+		ctx.lineTo(1.5, -1.5);
+		ctx.moveTo(-1.5, 7.5);
+		ctx.lineTo(7.5, -1.5);
+		ctx.moveTo(4.5, 7.5);
+		ctx.lineTo(7.5, 4.5);
+		ctx.stroke();
+		return ctx.createPattern(tile, 'repeat') ?? color.bg;
+	}
 
 	// The 14d avg tracks what the legend shows: hidden categories drop out of
 	// the sum. Recomputed on rebuild and on legend clicks; the marker plugin
@@ -236,6 +271,13 @@
 	function buildConfig(counts: DayCount[], cats: string[], range: { start: string; end: string }) {
 		// Filter to visible range so bars don't extend past the axis
 		const visible = counts.filter((d) => d.date >= range.start && d.date <= range.end);
+		// Completion rows aligned to the visible points (each point represents the
+		// bucket its date falls in, so week/month views line up too).
+		const compByLabel = new Map(completions.map((r) => [r.label, r]));
+		const comp = visible.map((d) => compByLabel.get(bucketLabel(d.date, bucket)));
+		// The overlay lives on its own hidden axis scaled so the tallest bar fills
+		// ~a quarter of the plot — readable without competing with the backlog.
+		const compMax = Math.max(1, ...comp.map((c) => (c ? c.backlog + c.sameDay : 0)));
 		return {
 			type: 'bar' as const,
 			data: {
@@ -254,6 +296,38 @@
 						tension: 0.3,
 						spanGaps: true
 					},
+					// Completion overlay (drawn over the category bars, under the avg
+					// line): solid = backlog completions, hatched = same-day churn.
+					...(showCompleted
+						? [
+								{
+									label: 'Completed',
+									data: comp.map((c) => c?.backlog ?? 0),
+									backgroundColor: DONE_COLOR.bg,
+									borderColor: DONE_COLOR.border,
+									borderWidth: 1,
+									borderRadius: 2,
+									stack: 'done',
+									yAxisID: 'y2',
+									grouped: false,
+									barPercentage: 0.45,
+									isCompletion: true
+								},
+								{
+									label: 'Same-day',
+									data: comp.map((c) => c?.sameDay ?? 0),
+									backgroundColor: hatch(DONE_COLOR),
+									borderColor: DONE_COLOR.border,
+									borderWidth: 1,
+									borderRadius: 2,
+									stack: 'done',
+									yAxisID: 'y2',
+									grouped: false,
+									barPercentage: 0.45,
+									isCompletion: true
+								}
+							]
+						: []),
 					...cats.map((cat, i) => {
 						const color = getSeriesColor(cat, tagColors, i);
 						return {
@@ -286,7 +360,9 @@
 							boxHeight: isMobile ? 10 : 12,
 							padding: isMobile ? 8 : 16,
 							useBorderRadius: true,
-							borderRadius: 2
+							borderRadius: 2,
+							// The Done chip toggles the overlay; keep it out of the legend
+							filter: (item: any, data: any) => !data.datasets[item.datasetIndex]?.isCompletion
 						},
 						// Default toggle + remember the choice, so it survives the
 						// chart rebuild that any range/data change triggers.
@@ -340,10 +416,15 @@
 										item.dataset.type === 'line' ? sum : sum + (item.raw || 0),
 									0
 								);
-								return `Total: ${total}`;
+								const lines = [`Total: ${total}`];
+								const c = items[0] ? comp[items[0].dataIndex] : undefined;
+								if (c && c.backlog + c.sameDay > 0) {
+									lines.push(`Completed: ${c.backlog + c.sameDay} · ${c.sameDay} same-day`);
+								}
+								return lines;
 							}
 						},
-						filter: (item: any) => item.raw > 0
+						filter: (item: any) => item.raw > 0 && !item.dataset.isCompletion
 					}
 				},
 				scales: {
@@ -357,6 +438,15 @@
 							font: { family: 'JetBrains Mono', size: 10 }
 						},
 						border: { display: false }
+					},
+					// Hidden axis for the completion overlay, scaled so its tallest
+					// bar sits at ~1/4 of the plot height.
+					y2: {
+						display: false,
+						beginAtZero: true,
+						stacked: true,
+						position: 'right' as const,
+						max: compMax * 4
 					}
 				}
 			}
@@ -421,6 +511,8 @@
 		const _a = avgSource;
 		const _mk = markers;
 		const _m = isMobile;
+		const _cp = completions;
+		const _sc = showCompleted;
 		// Rebuild on any change
 		rebuildChart();
 	});
