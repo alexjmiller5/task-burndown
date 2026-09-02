@@ -28,6 +28,32 @@ export const FALLBACK_COLORS: SeriesColor[] = [
 	{ bg: 'rgba(99, 102, 241, 0.55)', border: 'rgba(99, 102, 241, 1)' }
 ];
 
+// Muted tone for same-day churn — deliberately outside every group-by
+// palette so it reads as "not part of the open backlog".
+export const DONE_COLOR: SeriesColor = {
+	bg: 'rgba(203, 213, 225, 0.35)',
+	border: 'rgba(203, 213, 225, 0.9)'
+};
+
+/** Diagonal-stripe tile marking same-day segments (client-only: needs a canvas). */
+export function hatch(color: SeriesColor): CanvasPattern | string {
+	const tile = document.createElement('canvas');
+	tile.width = tile.height = 6;
+	const ctx = tile.getContext('2d');
+	if (!ctx) return color.bg;
+	ctx.strokeStyle = color.border;
+	ctx.lineWidth = 1.2;
+	ctx.beginPath();
+	ctx.moveTo(-1.5, 1.5);
+	ctx.lineTo(1.5, -1.5);
+	ctx.moveTo(-1.5, 7.5);
+	ctx.lineTo(7.5, -1.5);
+	ctx.moveTo(4.5, 7.5);
+	ctx.lineTo(7.5, 4.5);
+	ctx.stroke();
+	return ctx.createPattern(tile, 'repeat') ?? color.bg;
+}
+
 /** Resolve a series color: Notion color name, `#hex` (age-band ramp), or fallback by index. */
 export function getSeriesColor(
 	name: string,
