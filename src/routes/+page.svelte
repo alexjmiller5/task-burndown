@@ -771,28 +771,6 @@
 
 				<Button
 					variant="outline"
-					onclick={() => (showMarkers = !showMarkers)}
-					class={CHIP_BTN_CLASS}
-					style={showMarkers
-						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-						: 'border-color: var(--color-border-default); background: transparent;'}
-					title="Show event markers"
-				>
-					<div
-						class="size-1.5 rounded-full transition-colors duration-150"
-						style="background: {showMarkers
-							? 'var(--color-bitcoin)'
-							: 'var(--color-border-strong)'};"
-					></div>
-					<span
-						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-						style="color: {showMarkers ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-						>Markers</span
-					>
-				</Button>
-
-				<Button
-					variant="outline"
 					onclick={() => (showCompleted = !showCompleted)}
 					class={CHIP_BTN_CLASS}
 					style={showCompleted
@@ -810,6 +788,28 @@
 						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
 						style="color: {showCompleted ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
 						>Same-day</span
+					>
+				</Button>
+
+				<Button
+					variant="outline"
+					onclick={() => (showMarkers = !showMarkers)}
+					class={CHIP_BTN_CLASS}
+					style={showMarkers
+						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
+						: 'border-color: var(--color-border-default); background: transparent;'}
+					title="Show event markers"
+				>
+					<div
+						class="size-1.5 rounded-full transition-colors duration-150"
+						style="background: {showMarkers
+							? 'var(--color-bitcoin)'
+							: 'var(--color-border-strong)'};"
+					></div>
+					<span
+						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
+						style="color: {showMarkers ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
+						>Markers</span
 					>
 				</Button>
 			</div>
