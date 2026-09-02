@@ -6,8 +6,10 @@ export type FlowBucket = 'day' | 'week' | 'month';
 
 export interface FlowRow {
 	label: string;
-	created: Record<string, number>;
+	/** Completions of tasks that started on an earlier day (backlog burndown). */
 	completed: Record<string, number>;
+	/** Completions of tasks whose effective start was the completion day itself. */
+	sameDay: Record<string, number>;
 }
 
 function bucketLabel(dateStr: string, bucket: FlowBucket): string {
@@ -27,9 +29,11 @@ function nextBucket(label: string, bucket: FlowBucket): string {
 }
 
 /**
- * Created/completed counts per bucket covering [start, end], zero-filled and
- * broken down by the group keys each task had on the event's day (a multi-tag
- * task counts under each tag, mirroring the chart's stacking semantics).
+ * Completion counts per bucket covering [start, end], zero-filled, split into
+ * backlog completions vs same-day turnaround (effective start = completion
+ * day), and broken down by the group keys each task had on the completion day
+ * (a multi-tag task counts under each tag, mirroring the chart's stacking
+ * semantics).
  */
 export function calculateFlows(
 	tasks: Task[],
@@ -43,22 +47,20 @@ export function calculateFlows(
 	let label = bucketLabel(start, bucket);
 	const lastLabel = bucketLabel(end, bucket);
 	while (label <= lastLabel) {
-		rows.set(label, { label, created: {}, completed: {} });
+		rows.set(label, { label, completed: {}, sameDay: {} });
 		label = nextBucket(label, bucket);
 	}
 
-	function count(dateStr: string, task: Task, side: 'created' | 'completed') {
-		if (dateStr < start || dateStr > end) return;
+	for (const task of tasks) {
+		if (!task.completed) continue;
+		const dateStr = toLocalDateStr(task.completed, tz);
+		if (dateStr < start || dateStr > end) continue;
 		const row = rows.get(bucketLabel(dateStr, bucket));
-		if (!row) return;
+		if (!row) continue;
+		const side = getTaskStartDate(task, tz) === dateStr ? 'sameDay' : 'completed';
 		for (const key of getGroupKeys(task, groupBy, dateStr, tz)) {
 			row[side][key] = (row[side][key] ?? 0) + 1;
 		}
-	}
-
-	for (const task of tasks) {
-		count(getTaskStartDate(task, tz), task, 'created');
-		if (task.completed) count(toLocalDateStr(task.completed, tz), task, 'completed');
 	}
 	return Array.from(rows.values());
 }
