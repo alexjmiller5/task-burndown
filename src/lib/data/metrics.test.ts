@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import {
 	avgDueToCompletion,
-	calculateFlows,
+	calculateCompletions,
 	cancelRate,
 	rollingAvgTotals,
 	sampleDailyCounts
@@ -25,9 +25,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 	};
 }
 
-test('calculateFlows buckets completions by day and group category, zero-filled', () => {
+test('calculateCompletions buckets completions by day, zero-filled', () => {
 	const tasks = [
-		makeTask({ id: 'a', created: '2026-07-01T12:00:00.000Z', priority: 'High' }), // open — invisible
+		makeTask({ id: 'a', created: '2026-07-01T12:00:00.000Z' }), // open — invisible
 		makeTask({ id: 'b', created: '2026-07-01T15:00:00.000Z', completed: '2026-07-03' }),
 		// completed carries a timestamp with offset in real data
 		makeTask({
@@ -36,31 +36,24 @@ test('calculateFlows buckets completions by day and group category, zero-filled'
 			completed: '2026-07-02T22:13:00.000-04:00'
 		})
 	];
-	const rows = calculateFlows(
-		tasks,
-		'America/New_York',
-		'day',
-		'2026-07-01',
-		'2026-07-03',
-		'priority'
-	);
+	const rows = calculateCompletions(tasks, 'America/New_York', 'day', '2026-07-01', '2026-07-03');
 	expect(rows).toEqual([
-		{ label: '2026-07-01', completed: {}, sameDay: {} },
-		{ label: '2026-07-02', completed: { Medium: 1 }, sameDay: {} },
-		{ label: '2026-07-03', completed: { Medium: 1 }, sameDay: {} }
+		{ label: '2026-07-01', backlog: 0, sameDay: 0 },
+		{ label: '2026-07-02', backlog: 1, sameDay: 0 },
+		{ label: '2026-07-03', backlog: 1, sameDay: 0 }
 	]);
 });
 
-test('calculateFlows splits out tasks created and completed the same day', () => {
+test('calculateCompletions splits out tasks created and completed the same day', () => {
 	const tasks = [
 		makeTask({ id: 'quick', created: '2026-07-01T12:00:00.000Z', completed: '2026-07-01' }),
 		makeTask({ id: 'slow', created: '2026-06-01T12:00:00.000Z', completed: '2026-07-01' })
 	];
-	const rows = calculateFlows(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01', 'priority');
-	expect(rows).toEqual([{ label: '2026-07-01', completed: { Medium: 1 }, sameDay: { Medium: 1 } }]);
+	const rows = calculateCompletions(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01');
+	expect(rows).toEqual([{ label: '2026-07-01', backlog: 1, sameDay: 1 }]);
 });
 
-test('calculateFlows counts a deferred task finished early as same-day (clamped start)', () => {
+test('calculateCompletions counts a deferred task finished early as same-day (clamped start)', () => {
 	// Due after completion → effective start clamps to the completion day
 	const tasks = [
 		makeTask({
@@ -70,64 +63,46 @@ test('calculateFlows counts a deferred task finished early as same-day (clamped 
 			completed: '2026-07-01'
 		})
 	];
-	const rows = calculateFlows(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01', 'priority');
-	expect(rows[0].sameDay).toEqual({ Medium: 1 });
-	expect(rows[0].completed).toEqual({});
+	const rows = calculateCompletions(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01');
+	expect(rows).toEqual([{ label: '2026-07-01', backlog: 0, sameDay: 1 }]);
 });
 
-test('calculateFlows counts a multi-tag task under each of its tags', () => {
-	const tasks = [
-		makeTask({
-			created: '2026-07-01T12:00:00.000Z',
-			completed: '2026-07-01',
-			tags: ['Work', 'Errand']
-		})
-	];
-	const rows = calculateFlows(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01', 'tag');
-	expect(rows[0].sameDay).toEqual({ Work: 1, Errand: 1 });
+test('calculateCompletions — a backfilled task completed on entry is backlog, not same-day', () => {
+	// Entered and finished 08-23, but due months earlier: the effective start is
+	// the due date (matching the burndown), so this is a months-old obligation
+	// finally knocked out — not same-day churn.
+	const task = makeTask({
+		created: '2026-08-23T12:00:00.000Z',
+		dueDate: '2026-04-20',
+		completed: '2026-08-23'
+	});
+	const rows = calculateCompletions([task], 'America/New_York', 'day', '2026-08-23', '2026-08-23');
+	expect(rows).toEqual([{ label: '2026-08-23', backlog: 1, sameDay: 0 }]);
 });
 
-test('calculateFlows tags an untagged task as (Untagged)', () => {
-	const tasks = [
-		makeTask({ created: '2026-06-01T12:00:00.000Z', completed: '2026-07-01', tags: [] })
-	];
-	const rows = calculateFlows(tasks, 'UTC', 'day', '2026-07-01', '2026-07-01', 'tag');
-	expect(rows[0].completed).toEqual({ '(Untagged)': 1 });
-});
-
-test('calculateFlows age group-by buckets completions by age at completion', () => {
-	const tasks = [
-		makeTask({ id: 'old', created: '2026-01-01T12:00:00.000Z', completed: '2026-08-01' }),
-		makeTask({ id: 'new', created: '2026-08-01T12:00:00.000Z' })
-	];
-	const rows = calculateFlows(tasks, 'UTC', 'day', '2026-08-01', '2026-08-01', 'age');
-	expect(rows[0].completed).toEqual({ '6m+': 1 });
-	expect(rows[0].sameDay).toEqual({});
-});
-
-test('calculateFlows week buckets start on Monday', () => {
+test('calculateCompletions week buckets start on Monday', () => {
 	const tasks = [
 		makeTask({ id: 'a', created: '2026-06-01T12:00:00.000Z', completed: '2026-07-07' }), // Tue of week 07-06
 		makeTask({ id: 'b', created: '2026-06-01T12:00:00.000Z', completed: '2026-07-13' }) // Mon of week 07-13
 	];
-	const rows = calculateFlows(tasks, 'UTC', 'week', '2026-07-06', '2026-07-19', 'priority');
+	const rows = calculateCompletions(tasks, 'UTC', 'week', '2026-07-06', '2026-07-19');
 	expect(rows).toEqual([
-		{ label: '2026-07-06', completed: { Medium: 1 }, sameDay: {} },
-		{ label: '2026-07-13', completed: { Medium: 1 }, sameDay: {} }
+		{ label: '2026-07-06', backlog: 1, sameDay: 0 },
+		{ label: '2026-07-13', backlog: 1, sameDay: 0 }
 	]);
 });
 
-test('calculateFlows month buckets answer "how many did I finish in July"', () => {
+test('calculateCompletions month buckets answer "how many did I finish in July"', () => {
 	const tasks = [
 		makeTask({ id: 'a', created: '2026-06-01T12:00:00.000Z', completed: '2026-07-07' }),
 		makeTask({ id: 'b', created: '2026-07-20T12:00:00.000Z', completed: '2026-07-20' }),
 		makeTask({ id: 'c', created: '2026-06-01T12:00:00.000Z', completed: '2026-08-02' })
 	];
-	const rows = calculateFlows(tasks, 'UTC', 'month', '2026-06-15', '2026-08-10', 'priority');
+	const rows = calculateCompletions(tasks, 'UTC', 'month', '2026-06-15', '2026-08-10');
 	expect(rows).toEqual([
-		{ label: '2026-06', completed: {}, sameDay: {} },
-		{ label: '2026-07', completed: { Medium: 1 }, sameDay: { Medium: 1 } },
-		{ label: '2026-08', completed: { Medium: 1 }, sameDay: {} }
+		{ label: '2026-06', backlog: 0, sameDay: 0 },
+		{ label: '2026-07', backlog: 1, sameDay: 1 },
+		{ label: '2026-08', backlog: 1, sameDay: 0 }
 	]);
 });
 
@@ -204,18 +179,4 @@ test('cancelRate is the percentage of resolved tasks that were canceled', () => 
 	];
 	expect(cancelRate(tasks)).toEqual(25);
 	expect(cancelRate([makeTask({ status: 'To Do' })])).toBeNull();
-});
-
-test('calculateFlows — a backfilled task completed on entry is backlog, not same-day', () => {
-	// Entered and finished 08-23, but due months earlier: the effective start is
-	// the due date (matching the burndown), so this is a months-old obligation
-	// finally knocked out — not same-day churn.
-	const task = makeTask({
-		created: '2026-08-23T12:00:00.000Z',
-		dueDate: '2026-04-20',
-		completed: '2026-08-23'
-	});
-	const rows = calculateFlows([task], 'America/New_York', 'day', '2026-08-23', '2026-08-23', 'tag');
-	expect(rows[0].completed).toEqual({ Work: 1 });
-	expect(rows[0].sameDay).toEqual({});
 });

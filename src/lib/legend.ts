@@ -65,8 +65,8 @@ function writeStore(): void {
 	}
 }
 
-// Shared between TaskChart and FlowChart: both render the same category set,
-// so a toggle in one mode carries over to the other.
+// Legend-toggle memory for TaskChart, persisted per group-by so toggles
+// survive chart rebuilds and page reloads.
 export const hiddenLegendLabels = new Set<string>();
 let store: Record<string, string[]> | null = null;
 let currentGroup: string | null = null;
