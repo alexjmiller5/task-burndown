@@ -89,6 +89,9 @@
 	// Labels sit inside the plot, in headroom opened up above the tallest bar by
 	// raising the y-axis max — so they read against the chart without covering data.
 	let laneHeadroom = 0;
+	// Top of the tallest completion overlay bar (y units), so the marker-label
+	// headroom accounts for the bars poking above the stacks.
+	let chimneyTop = 0;
 	// Re-fitting the headroom costs a relayout, so cap it per chart instance —
 	// a loop here would hang the page, and it settles in a pass or two.
 	let laneFits = 0;
@@ -199,7 +202,7 @@
 			// labels sit on empty chart rather than on the data.
 			const want = needed + 10;
 			const H = chartArea.bottom - chartArea.top;
-			let dataMax = 0;
+			let dataMax = chimneyTop;
 			for (const d of dailyCounts) {
 				if (d.date < dateRange.start || d.date > dateRange.end) continue;
 				dataMax = Math.max(dataMax, (d.total as number) ?? 0, averages[d.date] ?? 0);
@@ -275,9 +278,22 @@
 		// bucket its date falls in, so week/month views line up too).
 		const compByLabel = new Map(completions.map((r) => [r.label, r]));
 		const comp = visible.map((d) => compByLabel.get(bucketLabel(d.date, bucket)));
-		// The overlay lives on its own hidden axis scaled so the tallest bar fills
-		// ~a quarter of the plot — readable without competing with the backlog.
+		// The overlay bars sit on top of each day's stack (floating [base, top]
+		// segments in y units), scaled so the tallest fills ~a quarter of the
+		// plot. Base = the *visible* categories' total, so legend toggles don't
+		// leave the bars hovering; a legend click triggers a rebuild (below).
 		const compMax = Math.max(1, ...comp.map((c) => (c ? c.backlog + c.sameDay : 0)));
+		const visCats = cats.filter((c) => !hiddenLegendLabels.has(c));
+		const visTotal = visible.map((d) => visCats.reduce((s, c) => s + ((d[c] as number) || 0), 0));
+		const dataMax = Math.max(1, ...visTotal);
+		const yPerComp = (dataMax * 0.25) / compMax;
+		chimneyTop = 0;
+		const floatSeg = (i: number, from: number, len: number): [number, number] => {
+			const base = visTotal[i] + from * yPerComp;
+			const top = base + len * yPerComp;
+			chimneyTop = Math.max(chimneyTop, top);
+			return [base, top];
+		};
 		return {
 			type: 'bar' as const,
 			data: {
@@ -302,26 +318,22 @@
 						? [
 								{
 									label: 'Completed',
-									data: comp.map((c) => c?.backlog ?? 0),
+									data: comp.map((c, i) => floatSeg(i, 0, c?.backlog ?? 0)),
 									backgroundColor: DONE_COLOR.bg,
 									borderColor: DONE_COLOR.border,
 									borderWidth: 1,
 									borderRadius: 2,
-									stack: 'done',
-									yAxisID: 'y2',
 									grouped: false,
 									barPercentage: 0.45,
 									isCompletion: true
 								},
 								{
 									label: 'Same-day',
-									data: comp.map((c) => c?.sameDay ?? 0),
+									data: comp.map((c, i) => floatSeg(i, c?.backlog ?? 0, c?.sameDay ?? 0)),
 									backgroundColor: hatch(DONE_COLOR),
 									borderColor: DONE_COLOR.border,
 									borderWidth: 1,
 									borderRadius: 2,
-									stack: 'done',
-									yAxisID: 'y2',
 									grouped: false,
 									barPercentage: 0.45,
 									isCompletion: true
@@ -369,13 +381,11 @@
 						onClick: (_e: any, item: any, legend: any) => {
 							const c = legend.chart;
 							const i = item.datasetIndex;
-							const nowHidden = c.isDatasetVisible(i);
-							c.setDatasetVisibility(i, !nowHidden);
-							recordLegendToggle(c.data.datasets[i].label, nowHidden);
-							// The avg line follows the visible categories.
-							averages = visibleAvg();
-							c.data.datasets[0].data = c.data.labels.map((d: string) => averages[d] ?? null);
-							c.update();
+							recordLegendToggle(c.data.datasets[i].label, c.isDatasetVisible(i));
+							// Full rebuild: the avg line AND the completion-overlay bases
+							// both depend on which categories are visible. Deferred a
+							// frame so we don't destroy the chart inside its own handler.
+							requestAnimationFrame(rebuildChart);
 						}
 					},
 					tooltip: {
@@ -418,7 +428,8 @@
 								);
 								const lines = [`Total: ${total}`];
 								const c = items[0] ? comp[items[0].dataIndex] : undefined;
-								if (c && c.backlog + c.sameDay > 0) {
+								if (c && (c.added > 0 || c.backlog + c.sameDay > 0)) {
+									lines.push(`Added: ${c.added}`);
 									lines.push(`Completed: ${c.backlog + c.sameDay} · ${c.sameDay} same-day`);
 								}
 								return lines;
