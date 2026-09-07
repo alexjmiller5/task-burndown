@@ -1,5 +1,5 @@
 # Canonical secrets manifest — 1Password secret references only, SAFE to commit.
-# IDs, not names (vault "Task Burndown" / item "Notion Task Burndown Chart
+# IDs, not names (vault "Notion Task Burndown Chart" / item "Notion Task Burndown Chart
 # Notion Internal Integration Secret") — names are free to change, IDs aren't.
 # Local dev:      op run --env-file=.env.tpl -- bun run dev
 # Push to CF:     just sync-secrets
