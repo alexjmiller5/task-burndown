@@ -92,7 +92,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 - `.env.tpl` — canonical secrets manifest (op:// references, safe to commit). Single entry: `NOTION_API_KEY`.
 - Local dev: `just dev` = `op run --env-file=.env.tpl -- bun run dev`.
 - Production: `just sync-secrets` (or the GHA deploy workflow) runs `scripts/sync-secrets.sh` to push Worker secrets via `wrangler secret put`.
-- 1Password vault: `Task Burndown`; service account: `task-burndown-ci` (read-only to that vault); SA token = repo GH secret `OP_SERVICE_ACCOUNT_TOKEN`.
+- 1Password vault: `Notion Task Burndown Chart`; service account: `task-burndown-ci` (read-only to that vault); SA token = repo GH secret `OP_SERVICE_ACCOUNT_TOKEN`.
 
 ## Deployment
 
