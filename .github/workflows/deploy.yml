@@ -25,7 +25,7 @@ jobs:
         with:
           export-env: true
         env:
-          # Stable IDs: vault "Task Burndown" / item "Cloudflare Task Burndown CI Token"
+          # Stable IDs: vault "Notion Task Burndown Chart" / item "Notion Task Burndown Chart CI Cloudflare Token"
           CLOUDFLARE_API_TOKEN: op://gvrp4y4i42c3j2khqbuijf4lxm/cdkacmcquj5jz55sx3prssobru/api-token
           CLOUDFLARE_ACCOUNT_ID: op://gvrp4y4i42c3j2khqbuijf4lxm/cdkacmcquj5jz55sx3prssobru/account-id
       - run: bun install --frozen-lockfile
