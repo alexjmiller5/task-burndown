@@ -15,7 +15,7 @@ bun install
 just dev        # dev server at http://localhost:5173, miniflare R2 for cache
 ```
 
-Secrets are injected via `op run` — you'll need to be signed into 1Password CLI with access to the `Notion Task Burndown Chart` vault.
+Secrets are injected via `op run` — you'll need to be signed into 1Password CLI with access to the `Task Burndown` vault.
 
 ## Bootstrap (first time)
 
@@ -76,10 +76,10 @@ task-burndown.nqipomyrjb.workers.dev/manifest.webmanifest
 Run these (note: zsh may require quoting vault names with spaces):
 
 ```bash
-op vault create "Notion Task Burndown Chart"
-op item move "Notion Task Burndown Chart Notion Internal Integration Secret" --current-vault Personal --destination-vault "Notion Task Burndown Chart"
-# CF creds for CI: create item "Notion Task Burndown Chart CI Cloudflare Token" in "Notion Task Burndown Chart" with fields api-token, account-id
-op service-account create task-burndown-ci --vault "Notion Task Burndown Chart:read_items"
+op vault create "Task Burndown"
+op item move "Task Burndown Notion Internal Integration Secret" --current-vault Personal --destination-vault "Task Burndown"
+# CF creds for CI: create item "Task Burndown CI Cloudflare Token" in "Task Burndown" with fields api-token, account-id
+op service-account create task-burndown-ci --vault "Task Burndown:read_items"
 ```
 
 ### 3. GitHub secret
