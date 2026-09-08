@@ -53,23 +53,20 @@ For local deploys you'll also need either `bunx wrangler login` or a `CLOUDFLARE
 
 The following cannot be codified and must be done once by hand:
 
-### 1. Enable Cloudflare Access
+### 1. Cloudflare Access (scripted, never the dashboard)
 
-Workers dashboard → `task-burndown` → Settings → Domains & Routes → workers.dev → **Enable Cloudflare Access**.
-
-Then: Zero Trust → Access → Applications → the auto-created app → set **Session Duration = 1 month** and confirm the policy uses the Cloudflare identity provider restricted to Alex's account.
-
-Finally, add a second Access application ("public PWA assets") with a **Bypass / Everyone** policy covering exactly these paths — iOS fetches the homescreen icon and browsers fetch the manifest **without cookies**, so without this the icon falls back to a letter monogram:
-
-```
-task-burndown.nqipomyrjb.workers.dev/apple-touch-icon.png
-task-burndown.nqipomyrjb.workers.dev/icon-192.png
-task-burndown.nqipomyrjb.workers.dev/icon-512.png
-task-burndown.nqipomyrjb.workers.dev/favicon.svg
-task-burndown.nqipomyrjb.workers.dev/manifest.webmanifest
+```bash
+scripts/cf-access.py --name task-burndown \
+  --domain task-burndown.<subdomain>.workers.dev \
+  --domain '*-task-burndown.<subdomain>.workers.dev' \
+  --email <you> --pwa
 ```
 
-(These are three chart PNGs and an app name — nothing sensitive. Everything else stays behind Access.)
+Idempotent (`--dry-run` previews). `--pwa` adds the bypass app for the
+cookie-less icon/manifest paths so the iOS homescreen icon renders. The
+workers.dev subdomain is account-level and has changed before - read it from
+the deploy output, and re-run this after any change (an app pointing at the
+old hostname protects nothing).
 
 ### 2. 1Password vault + service account
 
