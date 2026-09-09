@@ -22,3 +22,6 @@ vite.config.ts.timestamp-*
 
 # Legacy raw-pages cache (kept locally as the seed source)
 notion-cache.json
+
+# Python provisioning scripts
+__pycache__/
