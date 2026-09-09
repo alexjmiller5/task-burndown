@@ -137,3 +137,18 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 - Tailwind CSS utility classes for styling
 - Heroicons (inline SVG, sourced from `/Users/alexmiller/desktop/coding/reference-repos/heroicons`) for all icons; never emojis
 - `wrangler.jsonc` is the IaC; worker name `task-burndown`, R2 bucket `task-burndown-cache`
+
+## Cloudflare credential boundaries
+
+- `scripts/provision.py` mints a fresh, dedicated CI token with only Workers
+  Scripts Write on the selected account. Set `CLOUDFLARE_ACCOUNT_ID` when
+  the provisioning identity can see multiple accounts. Cloudflare enforces
+  this permission at account scope, not per Worker.
+- The CI token deploys this Worker and its existing bindings and secrets.
+  Runtime data access uses Worker bindings or service credentials; CI has
+  no direct D1, R2, DNS, email-routing, or Access administration permission.
+- Provisioning credentials stay with the operator. Mint, save to the
+  project CI item in 1Password, deploy, and verify before retiring the
+  previous token by provider ID. Minting never deletes a working token.
+- Check provisioning without credentials with
+  `uv run --with httpx python scripts/test_cloudflare_provision.py`.
