@@ -1,7 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Task, DayCount, GroupBy, ChartMode } from '$lib/types.js';
-	import { applyBaseFilters, applyViewFilters } from '$lib/data/filters.js';
+	import {
+		applyBaseFilters,
+		applyViewFilters,
+		DEFAULT_HIDDEN_STATUSES,
+		PROJECT_KINDS,
+		SAME_DAY_KINDS,
+		type ProjectKind,
+		type SameDayKind
+	} from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { PRIORITY_ORDER } from '$lib/data/parser.js';
 	import { AGE_BAND_ORDER, AI_ORDER } from '$lib/data/calculator.js';
@@ -18,7 +26,12 @@
 	import { DEFAULT_TIMEZONE, TIMEZONES, getCurrentDateStr } from '$lib/data/timezone.js';
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
 	import { MARKERS } from '$lib/markers.js';
-	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
+	import {
+		loadPreferences,
+		savePreferences,
+		TAG_KINDS,
+		type TagKind
+	} from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
 	import RateChart from '../components/RateChart.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
@@ -73,12 +86,35 @@
 	let activePreset: string = $state('90D');
 	let dateStart: string = $state(initial90D.start);
 	let dateEnd: string = $state(initial90D.end);
-	let includeProjectTasks: boolean = $state(true);
-	let includeCanceled: boolean = $state(false);
+	// Lenses: each is the list of kinds currently shown. Deselecting the last
+	// entry snaps back to all (nothing selected must never render nothing).
+	let tagKinds: TagKind[] = $state(['current']);
+	let projectKinds: ProjectKind[] = $state([...PROJECT_KINDS]);
+	let hiddenStatuses: string[] = $state([...DEFAULT_HIDDEN_STATUSES]);
+	let sameDayKinds: SameDayKind[] = $state([...SAME_DAY_KINDS]);
 	let showMarkers: boolean = $state(true);
-	let showLegacyTags: boolean = $state(false);
 	let groupBy: GroupBy = $state('tag');
-	let showCompleted: boolean = $state(true);
+	let showSameDay = $derived(sameDayKinds.includes('same'));
+
+	const TAG_KIND_LABELS: Record<TagKind, string> = {
+		current: 'Current tags',
+		legacy: 'Legacy tags'
+	};
+	const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
+		project: 'With project',
+		none: 'Without project'
+	};
+	const SAME_DAY_LABELS: Record<SameDayKind, string> = { same: 'Same-day', other: 'Multi-day' };
+
+	/** Trigger text for a two-kind lens: "<name>: all" or the one kind shown. */
+	function lensLabel<K extends string>(name: string, shown: K[], labels: Record<K, string>) {
+		return shown.length === Object.keys(labels).length ? `${name}: all` : labels[shown[0]];
+	}
+	/** Multi-select change handler that snaps an empty pick back to every kind. */
+	function pickKinds<K extends string>(all: readonly K[], v: string[]): K[] {
+		const picked = all.filter((k) => v.includes(k));
+		return picked.length ? picked : [...all];
+	}
 	let chartMode: ChartMode = $state('active');
 	let flowBucket: FlowBucket = $state('day');
 
@@ -99,6 +135,11 @@
 		mode: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z',
 		group:
 			'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
+		tags: 'M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z',
+		projects:
+			'M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z',
+		status: 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+		sameDay: 'm3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z',
 		bucket:
 			'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z',
 		tz: 'M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418',
@@ -113,6 +154,9 @@
 	const ACTION_BTN_CLASS =
 		'h-auto gap-2 rounded-control border-border-default px-3 py-2 font-[var(--font-mono)] text-xs tracking-wider text-muted uppercase hover:border-bitcoin/40 hover:text-muted dark:bg-transparent dark:border-border-default dark:hover:bg-bitcoin/5';
 	const CHIP_BTN_CLASS = 'h-auto gap-2 rounded-control px-3 py-2 dark:bg-transparent';
+	// A lens that is actively narrowing lights up like the old chips did
+	const LENS_ON_STYLE =
+		'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft); color: var(--color-bitcoin);';
 
 	let prefsLoaded = $state(false);
 
@@ -125,7 +169,14 @@
 		return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 	});
 
-	let baseTasks = $derived(applyBaseFilters(allTasks, includeCanceled));
+	let baseTasks = $derived(applyBaseFilters(allTasks));
+	let allStatuses = $derived([...new Set(baseTasks.map((t) => t.status))].sort());
+	let shownStatuses = $derived(allStatuses.filter((s) => !hiddenStatuses.includes(s)));
+	let statusLabel = $derived.by(() => {
+		const hiding = allStatuses.filter((s) => hiddenStatuses.includes(s));
+		if (hiding.length === 0) return 'All statuses';
+		return hiding.length === 1 ? `Hiding ${hiding[0]}` : `Hiding ${hiding.length}`;
+	});
 
 	let isFullSyncing: boolean = $state(false);
 	let isRefreshingToday: boolean = $state(false);
@@ -133,11 +184,7 @@
 	let refreshError: string | null = $state(null);
 
 	let filteredTasks = $derived(
-		applyViewFilters(baseTasks, {
-			includeLegacy: false,
-			includeIncomplete: true,
-			includeProjectTasks
-		})
+		applyViewFilters(baseTasks, { hiddenStatuses, projectKinds, sameDayKinds, tz: timezone })
 	);
 
 	let allCategories = $derived.by(() => {
@@ -158,9 +205,9 @@
 	let selectedCategories = $derived.by(() => {
 		switch (groupBy) {
 			case 'tag':
-				return showLegacyTags
-					? new Set(allTags)
-					: new Set(DEFAULT_TAGS.filter((t) => allTags.includes(t)));
+				return new Set(
+					allTags.filter((t) => tagKinds.includes(DEFAULT_TAGS.includes(t) ? 'current' : 'legacy'))
+				);
 			case 'priority':
 				return new Set(allPriorities);
 			case 'project':
@@ -268,12 +315,12 @@
 		const preset = activePreset;
 		const start = dateStart;
 		const end = dateEnd;
-		const legacy = showLegacyTags;
-		const projects = includeProjectTasks;
-		const canceled = includeCanceled;
+		const tags = tagKinds;
+		const projects = projectKinds;
+		const statuses = hiddenStatuses;
+		const sameDay = sameDayKinds;
 		const marks = showMarkers;
 		const grp = groupBy;
-		const done = showCompleted;
 		const mode = chartMode;
 		if (!prefsLoaded) return;
 		savePreferences({
@@ -281,11 +328,11 @@
 			timezone: tz,
 			groupBy: grp,
 			chartMode: mode,
-			showLegacyTags: legacy,
-			includeProjectTasks: projects,
-			includeCanceled: canceled,
+			tagKinds: tags,
+			projectKinds: projects,
+			hiddenStatuses: statuses,
+			sameDayKinds: sameDay,
 			showMarkers: marks,
-			showCompleted: done,
 			preset: (PRESET_LABELS as readonly string[]).includes(preset)
 				? (preset as PresetLabel)
 				: null,
@@ -472,11 +519,11 @@
 		if (stored) {
 			timezone = stored.timezone;
 			groupBy = stored.groupBy;
-			showLegacyTags = stored.showLegacyTags;
-			includeProjectTasks = stored.includeProjectTasks;
-			includeCanceled = stored.includeCanceled ?? false;
+			tagKinds = pickKinds(TAG_KINDS, stored.tagKinds ?? []);
+			projectKinds = pickKinds(PROJECT_KINDS, stored.projectKinds ?? []);
+			hiddenStatuses = stored.hiddenStatuses ?? [...DEFAULT_HIDDEN_STATUSES];
+			sameDayKinds = pickKinds(SAME_DAY_KINDS, stored.sameDayKinds ?? []);
 			showMarkers = stored.showMarkers ?? true;
-			showCompleted = stored.showCompleted ?? true;
 			chartMode = stored.chartMode ?? 'active';
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
@@ -700,96 +747,89 @@
 				</Select.Root>
 
 				{#if groupBy === 'tag'}
-					<Button
-						variant="outline"
-						onclick={() => (showLegacyTags = !showLegacyTags)}
-						class={CHIP_BTN_CLASS}
-						style={showLegacyTags
-							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-							: 'border-color: var(--color-border-default); background: transparent;'}
-						title="Include legacy tags"
+					<Select.Root
+						type="multiple"
+						value={tagKinds}
+						onValueChange={(v) => (tagKinds = pickKinds(TAG_KINDS, v))}
 					>
-						<div
-							class="size-1.5 rounded-full transition-colors duration-150"
-							style="background: {showLegacyTags
-								? 'var(--color-bitcoin)'
-								: 'var(--color-border-strong)'};"
-						></div>
-						<span
-							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-							>Legacy</span
+						<Select.Trigger
+							class={TRIGGER_CLASS}
+							style={tagKinds.length < TAG_KINDS.length ? LENS_ON_STYLE : ''}
+							title="Which tags count: current, legacy, or both"
 						>
-					</Button>
+							{@render controlIcon(ICONS.tags)}
+							<span>{lensLabel('Tags', tagKinds, TAG_KIND_LABELS)}</span>
+						</Select.Trigger>
+						<Select.Content class={CONTENT_CLASS}>
+							{#each TAG_KINDS as kind}
+								<Select.Item value={kind} label={TAG_KIND_LABELS[kind]} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/if}
 
 				{#if groupBy !== 'project'}
-					<Button
-						variant="outline"
-						onclick={() => (includeProjectTasks = !includeProjectTasks)}
-						class={CHIP_BTN_CLASS}
-						style={includeProjectTasks
-							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-							: 'border-color: var(--color-border-default); background: transparent;'}
-						title="Include project tasks"
+					<Select.Root
+						type="multiple"
+						value={projectKinds}
+						onValueChange={(v) => (projectKinds = pickKinds(PROJECT_KINDS, v))}
 					>
-						<div
-							class="size-1.5 rounded-full transition-colors duration-150"
-							style="background: {includeProjectTasks
-								? 'var(--color-bitcoin)'
-								: 'var(--color-border-strong)'};"
-						></div>
-						<span
-							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-							style="color: {includeProjectTasks ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-							>Projects</span
+						<Select.Trigger
+							class={TRIGGER_CLASS}
+							style={projectKinds.length < PROJECT_KINDS.length ? LENS_ON_STYLE : ''}
+							title="Which tasks count: with a project, without, or both"
 						>
-					</Button>
+							{@render controlIcon(ICONS.projects)}
+							<span>{lensLabel('Projects', projectKinds, PROJECT_KIND_LABELS)}</span>
+						</Select.Trigger>
+						<Select.Content class={CONTENT_CLASS}>
+							{#each PROJECT_KINDS as kind}
+								<Select.Item value={kind} label={PROJECT_KIND_LABELS[kind]} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				{/if}
 
-				<Button
-					variant="outline"
-					onclick={() => (includeCanceled = !includeCanceled)}
-					class={CHIP_BTN_CLASS}
-					style={includeCanceled
-						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-						: 'border-color: var(--color-border-default); background: transparent;'}
-					title="Include canceled tasks"
+				<Select.Root
+					type="multiple"
+					value={shownStatuses}
+					onValueChange={(v) =>
+						(hiddenStatuses = v.length ? allStatuses.filter((st) => !v.includes(st)) : [])}
 				>
-					<div
-						class="size-1.5 rounded-full transition-colors duration-150"
-						style="background: {includeCanceled
-							? 'var(--color-bitcoin)'
-							: 'var(--color-border-strong)'};"
-					></div>
-					<span
-						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-						style="color: {includeCanceled ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-						>Canceled</span
+					<Select.Trigger
+						class={TRIGGER_CLASS}
+						style={shownStatuses.length < allStatuses.length ? LENS_ON_STYLE : ''}
+						title="Which task statuses count"
 					>
-				</Button>
+						{@render controlIcon(ICONS.status)}
+						<span>{statusLabel}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
+						{#each allStatuses as st}
+							<Select.Item value={st} label={st} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 
-				<Button
-					variant="outline"
-					onclick={() => (showCompleted = !showCompleted)}
-					class={CHIP_BTN_CLASS}
-					style={showCompleted
-						? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-						: 'border-color: var(--color-border-default); background: transparent;'}
-					title="Cap each bar with the day's same-day tasks (created and completed that day — invisible to the open count)"
+				<Select.Root
+					type="multiple"
+					value={sameDayKinds}
+					onValueChange={(v) => (sameDayKinds = pickKinds(SAME_DAY_KINDS, v))}
 				>
-					<div
-						class="size-1.5 rounded-full transition-colors duration-150"
-						style="background: {showCompleted
-							? 'var(--color-bitcoin)'
-							: 'var(--color-border-strong)'};"
-					></div>
-					<span
-						class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-						style="color: {showCompleted ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-						>Same-day</span
+					<Select.Trigger
+						class={TRIGGER_CLASS}
+						style={sameDayKinds.length < SAME_DAY_KINDS.length ? LENS_ON_STYLE : ''}
+						title="Which tasks count: same-day (created and completed that day — invisible to the open count, drawn as a hatched cap), multi-day, or both"
 					>
-				</Button>
+						{@render controlIcon(ICONS.sameDay)}
+						<span>{lensLabel('Same-day', sameDayKinds, SAME_DAY_LABELS)}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
+						{#each SAME_DAY_KINDS as kind}
+							<Select.Item value={kind} label={SAME_DAY_LABELS[kind]} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
 
 				<Button
 					variant="outline"
@@ -870,7 +910,7 @@
 						{completions}
 						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
-						showSameDay={showCompleted}
+						{showSameDay}
 						markers={showMarkers ? MARKERS : []}
 					/>
 				{:else}
@@ -885,7 +925,7 @@
 						avgSource={dailyCounts}
 						markers={showMarkers ? MARKERS : []}
 						{completions}
-						{showCompleted}
+						showCompleted={showSameDay}
 					/>
 				{/if}
 			</div>
