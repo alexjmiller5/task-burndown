@@ -1,9 +1,6 @@
 import type { ChartMode, GroupBy } from '$lib/types.js';
-import { PROJECT_KINDS, SAME_DAY_KINDS, type ProjectKind, type SameDayKind } from './filters.ts';
+import { PROJECT_KINDS, type ProjectKind } from './filters.ts';
 import { PRESET_LABELS, type PresetLabel } from './presets.ts';
-
-export type TagKind = 'current' | 'legacy';
-export const TAG_KINDS: readonly TagKind[] = ['current', 'legacy'];
 
 export const STORAGE_KEY = 'burndown:prefs:v1';
 
@@ -12,11 +9,11 @@ export interface StoredPreferences {
 	timezone: string;
 	groupBy: GroupBy;
 	chartMode?: ChartMode;
-	/** Lenses: which kinds are shown (an empty list never persists - it snaps to all). */
-	tagKinds?: TagKind[];
+	showLegacyTags?: boolean;
+	/** Project lens: which kinds are shown (an empty list never persists - it snaps to all). */
 	projectKinds?: ProjectKind[];
-	hiddenStatuses?: string[];
-	sameDayKinds?: SameDayKind[];
+	includeCanceled?: boolean;
+	showCompleted?: boolean;
 	showMarkers?: boolean;
 	preset: PresetLabel | null;
 	dateStart?: string;
@@ -44,15 +41,9 @@ function isValid(parsed: unknown): parsed is StoredPreferences {
 	if (typeof p.timezone !== 'string') return false;
 	if (typeof p.groupBy !== 'string' || !VALID_GROUP_BY.includes(p.groupBy as GroupBy)) return false;
 	if (p.chartMode !== undefined && p.chartMode !== 'active' && p.chartMode !== 'rate') return false;
-	if (!isSubset(p.tagKinds, TAG_KINDS)) return false;
 	if (!isSubset(p.projectKinds, PROJECT_KINDS)) return false;
-	if (!isSubset(p.sameDayKinds, SAME_DAY_KINDS)) return false;
-	if (
-		p.hiddenStatuses !== undefined &&
-		!(Array.isArray(p.hiddenStatuses) && p.hiddenStatuses.every((x) => typeof x === 'string'))
-	)
-		return false;
-	if (p.showMarkers !== undefined && typeof p.showMarkers !== 'boolean') return false;
+	for (const k of ['showLegacyTags', 'includeCanceled', 'showCompleted', 'showMarkers'])
+		if (p[k] !== undefined && typeof p[k] !== 'boolean') return false;
 	if (p.preset !== null && !PRESET_LABELS.includes(p.preset as PresetLabel)) return false;
 	if (p.dateStart !== undefined && typeof p.dateStart !== 'string') return false;
 	if (p.dateEnd !== undefined && typeof p.dateEnd !== 'string') return false;

@@ -119,6 +119,24 @@ export function avgDueToCompletion(tasks: Task[], tz: string): number | null {
 	return n === 0 ? null : sum / n;
 }
 
+/** Tasks open at some point in [start, end]: started by the end, not resolved before the start. */
+export function tasksInWindow(tasks: Task[], tz: string, start: string, end: string): Task[] {
+	return tasks.filter((t) => {
+		if (getTaskStartDate(t, tz) > end) return false;
+		const done = t.completed ? toLocalDateStr(t.completed, tz) : null;
+		return !done || done >= start;
+	});
+}
+
+/** Tasks whose completion (or cancellation) date falls in [start, end]. */
+export function tasksResolvedIn(tasks: Task[], tz: string, start: string, end: string): Task[] {
+	return tasks.filter((t) => {
+		if (!t.completed) return false;
+		const done = toLocalDateStr(t.completed, tz);
+		return done >= start && done <= end;
+	});
+}
+
 /** Percentage of resolved tasks (completed or canceled) that were canceled; null if none resolved. */
 export function cancelRate(tasks: Task[]): number | null {
 	let canceled = 0;
