@@ -42,8 +42,6 @@ function validPrefs(overrides: Partial<StoredPreferences> = {}): StoredPreferenc
 		version: 1,
 		timezone: 'America/New_York',
 		groupBy: 'tag',
-		showLegacyTags: false,
-		includeProjectTasks: true,
 		preset: '90D',
 		...overrides
 	};
@@ -156,8 +154,6 @@ test('loadPreferences — invalid groupBy is rejected', () => {
 		version: 1,
 		timezone: 'UTC',
 		groupBy: 'bogus',
-		showLegacyTags: false,
-		includeProjectTasks: true,
 		preset: null
 	});
 	try {
@@ -173,12 +169,52 @@ test('loadPreferences — invalid preset label is rejected', () => {
 		version: 1,
 		timezone: 'UTC',
 		groupBy: 'tag',
-		showLegacyTags: false,
-		includeProjectTasks: true,
 		preset: 'INVALID'
 	});
 	try {
 		expect(loadPreferences()).toEqual(null);
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('loadPreferences — round-trips lens arrays', () => {
+	installStubStorage();
+	try {
+		const prefs = validPrefs({
+			tagKinds: ['legacy'],
+			projectKinds: ['none'],
+			hiddenStatuses: ['Canceled', 'Completed'],
+			sameDayKinds: ['same', 'other']
+		});
+		savePreferences(prefs);
+		expect(loadPreferences()).toEqual(prefs);
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('loadPreferences — rejects unknown lens values', () => {
+	const { setItems } = installStubStorage();
+	try {
+		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ projectKinds: ['bogus'] as any }));
+		expect(loadPreferences()).toEqual(null);
+		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ hiddenStatuses: [1] as any }));
+		expect(loadPreferences()).toEqual(null);
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('loadPreferences — ignores the retired boolean toggles', () => {
+	const { setItems } = installStubStorage();
+	try {
+		setItems[STORAGE_KEY] = JSON.stringify({
+			...validPrefs(),
+			showLegacyTags: true,
+			includeCanceled: true
+		});
+		expect(loadPreferences()?.groupBy).toEqual('tag');
 	} finally {
 		uninstallStubStorage();
 	}
