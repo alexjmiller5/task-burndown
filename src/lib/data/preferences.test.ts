@@ -182,10 +182,10 @@ test('loadPreferences — round-trips lens arrays', () => {
 	installStubStorage();
 	try {
 		const prefs = validPrefs({
-			tagKinds: ['legacy'],
 			projectKinds: ['none'],
-			hiddenStatuses: ['Canceled', 'Completed'],
-			sameDayKinds: ['same', 'other']
+			showLegacyTags: true,
+			includeCanceled: true,
+			showCompleted: false
 		});
 		savePreferences(prefs);
 		expect(loadPreferences()).toEqual(prefs);
@@ -199,7 +199,7 @@ test('loadPreferences — rejects unknown lens values', () => {
 	try {
 		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ projectKinds: ['bogus'] as any }));
 		expect(loadPreferences()).toEqual(null);
-		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ hiddenStatuses: [1] as any }));
+		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ includeCanceled: 'yes' as any }));
 		expect(loadPreferences()).toEqual(null);
 	} finally {
 		uninstallStubStorage();

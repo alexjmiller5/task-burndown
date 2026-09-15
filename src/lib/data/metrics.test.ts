@@ -4,7 +4,9 @@ import {
 	calculateCompletions,
 	cancelRate,
 	rollingAvgTotals,
-	sampleDailyCounts
+	sampleDailyCounts,
+	tasksInWindow,
+	tasksResolvedIn
 } from './metrics.ts';
 import type { Task } from '$lib/types.js';
 
@@ -192,4 +194,45 @@ test('cancelRate is the percentage of resolved tasks that were canceled', () => 
 	];
 	expect(cancelRate(tasks)).toEqual(25);
 	expect(cancelRate([makeTask({ status: 'To Do' })])).toBeNull();
+});
+
+function winTask(id: string, start: string, completed: string | null): Task {
+	return {
+		id,
+		created: `${start}T12:00:00.000Z`,
+		completed: completed ? `${completed}T12:00:00.000Z` : null,
+		dueDate: null,
+		status: completed ? 'Completed' : 'To Do',
+		tags: [],
+		priority: 'High',
+		projectName: '(No Project)',
+		aiCompleted: false,
+		hasProject: false,
+		lastEditedTime: '2026-01-01T00:00:00.000Z'
+	};
+}
+
+test('tasksInWindow keeps tasks open at any point in the window', () => {
+	const tasks = [
+		winTask('before', '2026-01-01', '2026-01-31'), // resolved before the window
+		winTask('spans', '2026-01-01', null), // still open
+		winTask('ends-on-start', '2026-01-15', '2026-02-01'),
+		winTask('ends-inside', '2026-01-15', '2026-02-10'),
+		winTask('starts-inside', '2026-02-20', '2026-03-05'),
+		winTask('after', '2026-03-10', null) // starts after the window
+	];
+	const ids = tasksInWindow(tasks, 'UTC', '2026-02-01', '2026-02-28').map((t) => t.id);
+	expect(ids).toEqual(['spans', 'ends-on-start', 'ends-inside', 'starts-inside']);
+});
+
+test('tasksResolvedIn keeps only tasks completed inside the window', () => {
+	const tasks = [
+		winTask('before', '2026-01-01', '2026-01-31'),
+		winTask('inside', '2026-01-01', '2026-02-01'),
+		winTask('edge', '2026-01-01', '2026-02-28'),
+		winTask('after', '2026-01-01', '2026-03-01'),
+		winTask('open', '2026-01-01', null)
+	];
+	const ids = tasksResolvedIn(tasks, 'UTC', '2026-02-01', '2026-02-28').map((t) => t.id);
+	expect(ids).toEqual(['inside', 'edge']);
 });
