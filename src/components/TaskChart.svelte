@@ -255,7 +255,8 @@
 								const c = items[0] ? comp[items[0].dataIndex] : undefined;
 								if (c && (c.added > 0 || c.backlog + c.sameDay > 0)) {
 									lines.push(`Added: ${c.added}`);
-									lines.push(`Completed: ${c.backlog + c.sameDay} · ${c.sameDay} same-day`);
+									lines.push(`Completed: ${c.backlog + c.sameDay}`);
+									lines.push(`Same-day: ${c.sameDay}`);
 								}
 								return lines;
 							}
