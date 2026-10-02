@@ -3,7 +3,7 @@ import {
 	assignLane,
 	laneStripHeight,
 	MARKER_LANE_HEIGHT,
-	MARKERS,
+	parseMarkers,
 	type PlacedLabel
 } from './markers.js';
 
@@ -85,18 +85,38 @@ describe('laneStripHeight', () => {
 	});
 });
 
-describe('MARKERS data', () => {
-	it('every marker has an ISO date and a label', () => {
-		for (const m of MARKERS) {
-			expect(m.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-			expect(m.label.length).toBeGreaterThan(0);
-		}
+describe('parseMarkers', () => {
+	it('accepts line markers and flat bands, sorted by date', () => {
+		expect(
+			parseMarkers([
+				{ date: '2026-03-01', label: 'B', direction: 'down' },
+				{ date: '2026-01-05', end: '2026-01-09', label: 'A', direction: 'flat' }
+			])
+		).toEqual([
+			{ date: '2026-01-05', end: '2026-01-09', label: 'A', direction: 'flat' },
+			{ date: '2026-03-01', label: 'B', direction: 'down' }
+		]);
 	});
 
-	it('flat bands end on or after they start', () => {
-		for (const m of MARKERS.filter((m) => m.direction === 'flat')) {
-			expect(m.end).toBeDefined();
-			expect(m.end! >= m.date).toBe(true);
-		}
+	it('trims labels and drops an end on line markers', () => {
+		expect(
+			parseMarkers([{ date: '2026-03-01', end: '2026-03-02', label: ' B ', direction: 'up' }])
+		).toEqual([{ date: '2026-03-01', label: 'B', direction: 'up' }]);
+	});
+
+	it.each([
+		['a non-array', { date: '2026-03-01' }],
+		['a bad date', [{ date: '2026-3-1', label: 'x', direction: 'up' }]],
+		['an impossible date', [{ date: '2026-02-30', label: 'x', direction: 'up' }]],
+		['an empty label', [{ date: '2026-03-01', label: '  ', direction: 'up' }]],
+		['an unknown direction', [{ date: '2026-03-01', label: 'x', direction: 'left' }]],
+		['a flat band without an end', [{ date: '2026-03-01', label: 'x', direction: 'flat' }]],
+		[
+			'a flat band ending before it starts',
+			[{ date: '2026-03-05', end: '2026-03-01', label: 'x', direction: 'flat' }]
+		],
+		['an over-long label', [{ date: '2026-03-01', label: 'x'.repeat(81), direction: 'up' }]]
+	])('rejects %s', (_, input) => {
+		expect(() => parseMarkers(input)).toThrow();
 	});
 });
