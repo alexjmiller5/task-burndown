@@ -25,13 +25,14 @@
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
 	import { DEFAULT_TIMEZONE, TIMEZONES, getCurrentDateStr } from '$lib/data/timezone.js';
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
-	import { MARKERS } from '$lib/markers.js';
+	import { parseMarkers, type ChartMarker } from '$lib/markers.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
 	import RateChart from '../components/RateChart.svelte';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import RangeSlider from '../components/RangeSlider.svelte';
+	import MarkerEditor from '../components/MarkerEditor.svelte';
 
 	const DEFAULT_TAGS = [
 		'Learning',
@@ -88,6 +89,7 @@
 	let includeCanceled: boolean = $state(false);
 	let showCompleted: boolean = $state(true);
 	let showMarkers: boolean = $state(true);
+	let markers: ChartMarker[] = $state([]);
 	let groupBy: GroupBy = $state('tag');
 
 	const PROJECT_KIND_LABELS: Record<ProjectKind, string> = {
@@ -345,6 +347,15 @@
 		tagColors = d.tagColors;
 	}
 
+	async function loadMarkers() {
+		try {
+			const res = await fetch('/api/markers');
+			if (res.ok) markers = parseMarkers(await res.json());
+		} catch {
+			// ponytail: markers are decoration; a failed load just draws none
+		}
+	}
+
 	async function loadTasks() {
 		refreshError = null;
 		try {
@@ -534,6 +545,7 @@
 		}
 		prefsLoaded = true;
 
+		void loadMarkers();
 		await loadTasks(); // paint from R2 cache immediately, then pull edits
 		// ponytail: page-load sync is edits-only (cheap, self-healing); the
 		// deletion sweep and full sync stay manual via their buttons
@@ -852,6 +864,11 @@
 						>Markers</span
 					>
 				</Button>
+				<MarkerEditor
+					{markers}
+					today={getCurrentDateStr(timezone)}
+					onsaved={(m) => (markers = m)}
+				/>
 			</div>
 
 			<!-- Right side: sync actions only -->
@@ -911,7 +928,7 @@
 						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
 						showSameDay={showCompleted}
-						markers={showMarkers ? MARKERS : []}
+						markers={showMarkers ? markers : []}
 					/>
 				{:else}
 					<TaskChart
@@ -923,7 +940,7 @@
 						tagColors={chartColors}
 						{hiddenByDefault}
 						avgSource={dailyCounts}
-						markers={showMarkers ? MARKERS : []}
+						markers={showMarkers ? markers : []}
 						{completions}
 						{showCompleted}
 					/>

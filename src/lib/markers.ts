@@ -1,8 +1,9 @@
-// Manual event markers on the Active chart (day/week buckets). Colour follows
-// the burndown's own good/bad axis: 'up' = task dump, backlog grew, red;
-// 'down' = purge, backlog shrank, green (the same green AI Completed uses for
-// "done"); 'flat' = a shaded neutral band from date to end (stagnation: trips,
-// breaks). The Markers chip toggles all of them.
+// Event markers on the charts. Colour follows the burndown's own good/bad
+// axis: 'up' = task dump, backlog grew, red; 'down' = purge, backlog shrank,
+// green (the same green AI Completed uses for "done"); 'flat' = a shaded
+// neutral band from date to end (stagnation: trips, breaks). The markers are
+// the user's data: they live in the app's R2 store (`markers.json`, served by
+// /api/markers) and are edited in the page's marker editor, never in code.
 export interface ChartMarker {
 	date: string; // YYYY-MM-DD
 	end?: string; // for 'flat' bands
@@ -10,7 +11,34 @@ export interface ChartMarker {
 	direction: 'up' | 'down' | 'flat';
 }
 
-export const MARKERS: ChartMarker[] = [];
+export const MARKER_DIRECTIONS = ['up', 'down', 'flat'] as const;
+export const MARKER_LABEL_MAX = 80;
+
+function isIsoDate(v: unknown): v is string {
+	if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+	return new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
+}
+
+/** Validate a stored/submitted marker list; throws on the first bad entry. */
+export function parseMarkers(input: unknown): ChartMarker[] {
+	if (!Array.isArray(input)) throw new Error('markers must be an array');
+	return input
+		.map((raw, i): ChartMarker => {
+			const m = raw as Record<string, unknown>;
+			const label = typeof m?.label === 'string' ? m.label.trim() : '';
+			const direction = m?.direction as ChartMarker['direction'];
+			if (!isIsoDate(m?.date)) throw new Error(`marker ${i}: date must be YYYY-MM-DD`);
+			if (!label || label.length > MARKER_LABEL_MAX)
+				throw new Error(`marker ${i}: label must be 1-${MARKER_LABEL_MAX} characters`);
+			if (!MARKER_DIRECTIONS.includes(direction))
+				throw new Error(`marker ${i}: direction must be up, down or flat`);
+			if (direction !== 'flat') return { date: m.date as string, label, direction };
+			if (!isIsoDate(m.end) || m.end < (m.date as string))
+				throw new Error(`marker ${i}: a flat band needs an end on or after its date`);
+			return { date: m.date as string, end: m.end, label, direction };
+		})
+		.sort((a, b) => a.date.localeCompare(b.date));
+}
 
 /** Marker labels live in horizontal lanes in the headroom above the bars. */
 export interface PlacedLabel {
