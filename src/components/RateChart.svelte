@@ -63,7 +63,7 @@
 			grid: { color: 'rgba(30, 41, 59, 0.4)', lineWidth: 0.5 },
 			ticks: {
 				color: '#94A3B8',
-				font: { family: 'JetBrains Mono', size: 10 },
+				font: { family: 'JetBrains Mono Variable', size: 10 },
 				maxRotation: 0
 			},
 			border: { color: 'rgba(30, 41, 59, 0.6)' }
@@ -158,7 +158,7 @@
 						position: 'top' as const,
 						labels: {
 							color: '#94A3B8',
-							font: { family: 'JetBrains Mono', size: isMobile ? 9 : 11 },
+							font: { family: 'JetBrains Mono Variable', size: isMobile ? 9 : 11 },
 							boxWidth: isMobile ? 10 : 12,
 							boxHeight: isMobile ? 10 : 12,
 							padding: isMobile ? 8 : 16,
@@ -177,10 +177,10 @@
 						borderWidth: 1,
 						titleColor: '#FFFFFF',
 						bodyColor: '#94A3B8',
-						titleFont: { family: 'Space Grotesk', size: 13, weight: '600' as const },
-						bodyFont: { family: 'JetBrains Mono', size: 11 },
+						titleFont: { family: 'Space Grotesk Variable', size: 13, weight: '600' as const },
+						bodyFont: { family: 'JetBrains Mono Variable', size: 11 },
 						footerColor: '#FFFFFF',
-						footerFont: { family: 'JetBrains Mono', size: 12, weight: 'bold' as const },
+						footerFont: { family: 'JetBrains Mono Variable', size: 12, weight: 'bold' as const },
 						padding: 12,
 						cornerRadius: 8,
 						// Floating [base, end] bars: read the true value off the row, not raw
@@ -203,7 +203,7 @@
 						grid: { color: 'rgba(30, 41, 59, 0.3)', lineWidth: 0.5 },
 						ticks: {
 							color: '#94A3B8',
-							font: { family: 'JetBrains Mono', size: 10 },
+							font: { family: 'JetBrains Mono Variable', size: 10 },
 							precision: 0,
 							callback: (v: number) => Math.abs(v)
 						},
@@ -242,6 +242,15 @@
 		};
 
 		rebuildChart();
+		// Canvas caches text widths. Rebuild after local fonts replace the fallback.
+		void Promise.all([
+			document.fonts.load('10px "JetBrains Mono Variable"'),
+			document.fonts.load('600 13px "Space Grotesk Variable"')
+		])
+			.then(() => {
+				if (canvas?.isConnected) rebuildChart();
+			})
+			.catch(() => {});
 	});
 
 	$effect(() => {

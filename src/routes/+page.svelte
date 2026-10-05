@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { readDashboard } from '$lib/offline';
 	import dayjs from 'dayjs';
 	import type { Task, DayCount, GroupBy, ChartMode } from '$lib/types.js';
 	import {
@@ -163,6 +164,8 @@
 	let isRefreshingToday: boolean = $state(false);
 
 	let refreshError: string | null = $state(null);
+	let savedAt = $state<string | null>(null);
+	let tasksLoaded = $state(false);
 
 	let filteredTasks = $derived(applyViewFilters(baseTasks, { projectKinds }));
 
@@ -347,26 +350,25 @@
 		tagColors = d.tagColors;
 	}
 
-	async function loadMarkers() {
+	async function loadMarkers(refresh = false) {
 		try {
-			const res = await fetch('/api/markers');
-			if (res.ok) markers = parseMarkers(await res.json());
+			const result = await readDashboard<unknown>('/api/markers', fetch, { refresh });
+			markers = parseMarkers(result.data);
 		} catch {
 			// ponytail: markers are decoration; a failed load just draws none
 		}
 	}
 
-	async function loadTasks() {
+	async function loadTasks(refresh = false) {
 		refreshError = null;
 		try {
-			const res = await fetch('/api/tasks');
-			if (!res.ok) {
-				refreshError = `${res.status}`;
-				return;
-			}
-			applyParsed((await res.json()) as TaskCache);
+			const result = await readDashboard<TaskCache>('/api/tasks', fetch, { refresh });
+			applyParsed(result.data);
+			savedAt = result.savedAt;
 		} catch (e) {
 			refreshError = (e as Error).message;
+		} finally {
+			tasksLoaded = true;
 		}
 	}
 
@@ -405,6 +407,7 @@
 				return;
 			}
 			applyParsed(cacheData);
+			await loadTasks(true);
 		} catch (e) {
 			refreshError = (e as Error).message;
 		} finally {
@@ -427,7 +430,7 @@
 			if (meta.needsFull) {
 				await fullSync(); // empty cache bootstraps itself via the chunk loop
 			} else {
-				await loadTasks();
+				await loadTasks(true);
 			}
 		} catch (e) {
 			refreshError = (e as Error).message;
@@ -506,6 +509,7 @@
 				return;
 			}
 			applyParsed(pruned);
+			await loadTasks(true);
 		} catch (e) {
 			refreshError = (e as Error).message;
 		} finally {
@@ -549,7 +553,7 @@
 		await loadTasks(); // paint from R2 cache immediately, then pull edits
 		// ponytail: page-load sync is edits-only (cheap, self-healing); the
 		// deletion sweep and full sync stay manual via their buttons
-		await refreshEdits();
+		if (navigator.onLine && !savedAt) await refreshEdits();
 	});
 </script>
 
@@ -605,6 +609,10 @@
 				</div>
 			{/if}
 		</div>
+		{#if savedAt}<p class="text-xs text-muted mt-2" role="status">
+				Showing saved data from {new Date(savedAt).toLocaleString()}.
+				<a href="/?online=1" data-sveltekit-reload class="underline">Reconnect</a>
+			</p>{/if}
 	</header>
 
 	<!-- Stats — under header on desktop, at the bottom on mobile -->
@@ -867,7 +875,10 @@
 				<MarkerEditor
 					{markers}
 					today={getCurrentDateStr(timezone)}
-					onsaved={(m) => (markers = m)}
+					onsaved={(m) => {
+						markers = m;
+						void loadMarkers(true);
+					}}
 				/>
 			</div>
 
@@ -914,8 +925,17 @@
 				class="order-1 sm:order-3 flex-1 min-h-0 sm:flex-none sm:h-[var(--chart-height-tablet)] flex items-center justify-center"
 			>
 				<div class="text-center">
-					<div class="loader mx-auto"></div>
-					<p class="mt-4 text-muted font-[var(--font-mono)] text-sm">Loading task data...</p>
+					{#if !tasksLoaded}
+						<div class="loader mx-auto"></div>
+						<p class="mt-4 text-muted font-[var(--font-mono)] text-sm">Loading task data...</p>
+					{:else}
+						<p class="text-muted text-sm">
+							{refreshError
+								? 'Task data is unavailable. Check your connection and try again.'
+								: 'No tasks to show.'}
+						</p>
+						<a href="/?online=1" data-sveltekit-reload class="text-sm underline">Reconnect</a>
+					{/if}
 				</div>
 			</div>
 		{:else}

@@ -86,3 +86,12 @@ Add `OP_SERVICE_ACCOUNT_TOKEN` as a repo secret (value = the SA token output fro
 ### 4. iPhone homescreen
 
 Open the site in Safari, sign in once with your Cloudflare account, then Share → **Add to Home Screen**. The `CF_Authorization` cookie persists for ~1 month; subsequent launches open directly to the app.
+
+## Offline use
+
+Open the dashboard online once and let it finish loading. Later launches can use
+its downloaded application and last successful data on that device. Saved data is
+labelled with its save time. Reconnect loads through Cloudflare Access when your
+connection returns or your sign-in needs renewing. Refresh waits for a fresh
+response and keeps the previous chart if the request fails. Clearing the site's
+browser data removes the offline copy; a first visit still needs internet access.

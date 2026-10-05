@@ -102,7 +102,7 @@ export function createMarkerPlugin(getMarkers: () => ChartMarker[], getDataMax: 
 			if (markers.length === 0 || !x || x.type !== 'time') return;
 			const { ctx, chartArea } = c;
 			const px = (d: string) => x.getPixelForValue(new Date(`${d}T12:00:00`).getTime());
-			const FONT = '10px JetBrains Mono';
+			const FONT = '10px JetBrains Mono Variable';
 			const GAP = 10;
 			const TOP = chartArea.top + 4;
 
