@@ -322,12 +322,14 @@
 		const marks = showMarkers;
 		const grp = groupBy;
 		const mode = chartMode;
+		const bucket = flowBucket;
 		if (!prefsLoaded) return;
 		savePreferences({
 			version: 1,
 			timezone: tz,
 			groupBy: grp,
 			chartMode: mode,
+			flowBucket: bucket,
 			showLegacyTags: legacy,
 			projectKinds: projects,
 			includeCanceled: canceled,
@@ -535,6 +537,7 @@
 			showCompleted = stored.showCompleted ?? true;
 			showMarkers = stored.showMarkers ?? true;
 			chartMode = stored.chartMode ?? 'active';
+			flowBucket = stored.flowBucket ?? 'day';
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
 				const range = getPresetRange(stored.preset, stored.timezone);
