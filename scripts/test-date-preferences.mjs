@@ -13,8 +13,13 @@ const ws = new WebSocket(tab.webSocketDebuggerUrl);
 await new Promise((r) => ws.addEventListener('open', r, { once: true }));
 let seq = 0;
 const pending = new Map();
+const ownershipWarnings = [];
 ws.addEventListener('message', ({ data }) => {
 	const m = JSON.parse(data);
+	if (m.method === 'Runtime.consoleAPICalled') {
+		const message = m.params.args.map((a) => a.value ?? '').join(' ');
+		if (message.includes('ownership_invalid_')) ownershipWarnings.push(message);
+	}
 	if (m.id) {
 		const p = pending.get(m.id);
 		pending.delete(m.id);
@@ -35,6 +40,8 @@ const evaluate = async (expression) => {
 let injection;
 try {
 	await send('Page.enable');
+	await send('Runtime.discardConsoleEntries');
+	await send('Runtime.enable');
 	injection = await send('Page.addScriptToEvaluateOnNewDocument', {
 		source: `(()=>{const nativeFetch=window.fetch; window.fetch=(input,init)=>{const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;if(path==='/api/tasks')return Promise.resolve(new Response(JSON.stringify({tasks:[{id:'fixture-1',created:'2025-02-01T12:00:00Z',completed:null,dueDate:null,status:'To Do',tags:['Chore'],priority:'High',projectName:'Example',hasProject:true,aiCompleted:false,lastEditedTime:'2026-10-01T12:00:00Z'}],allTags:['Chore'],allPriorities:['High'],allProjects:['Example'],tagColors:{},lastFullRefreshAt:null}),{headers:{'Content-Type':'application/json'}}));if(path==='/api/markers')return Promise.resolve(new Response('[]',{headers:{'Content-Type':'application/json'}}));if(path.startsWith('/api/'))return Promise.resolve(new Response(JSON.stringify({needsFull:false,freshCount:0}),{headers:{'Content-Type':'application/json'}}));return nativeFetch(input,init)};})();`
 	});
@@ -75,6 +82,31 @@ try {
 	await evaluate('localStorage.clear()');
 	await send('Page.reload');
 	await new Promise((r) => setTimeout(r, 900));
+	const projectLens = 'Which tasks count: with a project, without, or both';
+	await choose(projectLens, 'Without project');
+	await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+	await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+	await pause();
+	assert.deepEqual(
+		await evaluate(`JSON.parse(localStorage.getItem('burndown:prefs:v1')).projectKinds`),
+		['project']
+	);
+	await send('Page.reload');
+	await new Promise((r) => setTimeout(r, 900));
+	assert.equal(
+		await evaluate(`document.querySelector('button[title="${projectLens}"]').textContent.trim()`),
+		'With project'
+	);
+	await choose(projectLens, 'With project');
+	await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+	await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+	await pause();
+	assert.deepEqual(
+		await evaluate(`JSON.parse(localStorage.getItem('burndown:prefs:v1')).projectKinds`),
+		['project', 'none'],
+		'Deselecting last lens value restores all'
+	);
+	assert.deepEqual(ownershipWarnings, [], 'Select bindings must preserve state ownership');
 	await choose('Time bucket', 'Month');
 	await choose('Group by', 'Priority');
 	await evaluate(`document.querySelector('button[title="Include canceled tasks"]').click()`);
