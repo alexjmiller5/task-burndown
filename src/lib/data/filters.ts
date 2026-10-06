@@ -11,12 +11,15 @@ export interface FilterOptions {
 	projectKinds: readonly ProjectKind[];
 }
 
-/** Remove tasks that should never be shown; canceled ones only when toggled in. */
+/** Remove unchartable tasks; canceled ones only when toggled in. */
 export function applyBaseFilters(tasks: Task[], includeCanceled = false): Task[] {
 	return tasks.filter((task) => {
 		if (!task.created) return false;
-		if (!includeCanceled && (task.status === 'Cancelled' || task.status === 'Canceled'))
-			return false;
+		const canceled = task.status === 'Cancelled' || task.status === 'Canceled';
+		if (!includeCanceled && canceled) return false;
+		// A terminal status is not open backlog. Without its completion date we
+		// cannot place it on the timeline without inventing history.
+		if (!task.completed && (task.status === 'Completed' || canceled)) return false;
 		if (task.tags.includes('useless')) return false;
 		return true;
 	});
