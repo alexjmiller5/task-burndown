@@ -49,7 +49,7 @@ Pure TypeScript modules shared between server and client:
 
 - `parser.ts` — `parseTasks(pages): ParsedData` parses Notion pages into **unfiltered** Task objects + metadata. No filtering; callers call `applyBaseFilters` themselves.
 - `merge.ts` — `mergeParsedData` (id-keyed merge of incremental result into cached tasks); `getIncrementalSince` (threshold = earlier of `max(created)` and `max(lastEditedTime)` across cached tasks).
-- `filters.ts` — `applyBaseFilters` (useless always; canceled unless the Canceled chip toggles them in) and `applyViewFilters` (legacy cutoff 2025-01-10, then the Projects lens: `projectKinds` with/without project).
+- `filters.ts` - `applyBaseFilters` (useless always; canceled unless the Canceled chip toggles them in; completed/canceled tasks without a completion date cannot be charted) and `applyViewFilters` (legacy cutoff 2025-01-10, then the Projects lens: `projectKinds` with/without project).
 - `timezone.ts` — `toLocalDateStr`, `addDays` (DST-safe via UTC arithmetic), `getCurrentDateStr`, plus the curated `TIMEZONES` list and `DEFAULT_TIMEZONE` (`America/New_York`).
 - `presets.ts` — `getPresetRange(label, tz)` for the date-range preset buttons (7D/30D/90D/1Y/MTD/YTD/ALL).
 - `events.ts` — Builds events Map keyed by date with created/completed/stateChange arrays. Takes a `tz` parameter so `created_time` (UTC ISO) buckets to the user's selected timezone.
@@ -130,6 +130,12 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` —
 **DST safety**: `addDays` in `timezone.ts` uses `Date.UTC` + `setUTCDate` so calendar-day arithmetic never lands on the wrong day across DST transitions, regardless of host TZ.
 
 **View filters**: Base filters (cancelled, useless) apply client-side via `applyBaseFilters` after loading the cache. Toggle filters (legacy cutoff 2025-01-10, incomplete tasks, project tasks) apply client-side for instant response.
+
+**Missing completion dates**: Completed and canceled tasks without a completion
+date stay in the unfiltered cache but are excluded from all chart series and
+header metrics. Their status proves they are closed, but their history cannot be
+placed accurately. Never substitute their last edit or creation time for a
+completion date. Open tasks without a due date still count from their creation.
 
 ## Code Conventions
 

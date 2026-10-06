@@ -6,6 +6,9 @@ import {
 	type FilterOptions
 } from './filters.ts';
 import type { Task } from '$lib/types.js';
+import { buildEventsMap, getMinDate } from './events.ts';
+import { calculateDailyCounts } from './calculator.ts';
+import { tasksInWindow, calculateCompletions } from './metrics.ts';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
 	return {
@@ -36,6 +39,42 @@ test('applyBaseFilters always drops useless-tagged and created-less tasks', () =
 	];
 	expect(ids(applyBaseFilters(tasks))).toEqual(['task-1']);
 });
+
+test.each(['Completed', 'Canceled', 'Cancelled'])(
+	'%s tasks without a completion date do not become permanent backlog or invented completions',
+	(status) => {
+		const tasks = applyBaseFilters(
+			[
+				makeTask({ id: 'open', dueDate: '2026-05-01' }),
+				makeTask({ id: 'undated-open', dueDate: null }),
+				makeTask({ id: 'unknown-completion', status, priority: '(No Priority)' }),
+				makeTask({ id: 'dated-completion', status, completed: '2026-05-02' })
+			],
+			true
+		);
+		const counts = calculateDailyCounts({
+			events: buildEventsMap(tasks, 'UTC'),
+			minDate: getMinDate(tasks, 'UTC'),
+			limitDate: '2026-05-03',
+			groupBy: 'priority',
+			allCategories: ['Medium', '(No Priority)'],
+			selectedCategories: new Set(['Medium', '(No Priority)']),
+			tz: 'UTC'
+		});
+		expect(counts.map((day) => day.total)).toEqual([3, 2, 2]);
+		expect(counts.map((day) => day['(No Priority)'])).toEqual([0, 0, 0]);
+		expect(ids(tasksInWindow(tasks, 'UTC', '2026-05-01', '2026-05-03'))).toEqual([
+			'open',
+			'undated-open',
+			'dated-completion'
+		]);
+		expect(
+			calculateCompletions(tasks, 'UTC', 'day', '2026-05-01', '2026-05-03').map(
+				(day) => day.backlog + day.sameDay
+			)
+		).toEqual([0, 1, 0]);
+	}
+);
 
 test('applyViewFilters drops legacy tasks created before the cutoff', () => {
 	const tasks = [makeTask(), makeTask({ id: 'old', created: '2024-12-01T00:00:00.000Z' })];

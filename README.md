@@ -40,6 +40,11 @@ For local deploys you'll also need either `bunx wrangler login` or a `CLOUDFLARE
 - Stacked area chart showing active task counts over time, grouped by tag, priority, or project
 - Filtering by tags, due date status, legacy cutoff, and incomplete/project toggles
 
+Completed or canceled tasks with no completion date are excluded from the chart
+and its metrics, since their history cannot be dated. They remain in Notion and
+the cache. Open tasks without a due date count from their creation date. Subtasks
+count individually, so a Notion view hiding subtasks can show a smaller total.
+
 ## Secrets
 
 `.env.tpl` holds op:// references (safe to commit). Local dev secrets are injected by `just dev` (`op run --env-file=.env.tpl -- bun run dev`). Production secret (`NOTION_API_KEY`) is pushed to the Worker via `just sync-secrets` or the GHA deploy workflow.
