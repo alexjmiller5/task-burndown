@@ -148,7 +148,7 @@ test('savePreferences — no-op without localStorage (SSR safety)', () => {
 	expect(() => savePreferences(validPrefs())).not.toThrow();
 });
 
-test('loadPreferences — invalid groupBy is rejected', () => {
+test('loadPreferences - invalid groupBy falls back independently', () => {
 	const { setItems } = installStubStorage();
 	setItems[STORAGE_KEY] = JSON.stringify({
 		version: 1,
@@ -157,13 +157,13 @@ test('loadPreferences — invalid groupBy is rejected', () => {
 		preset: null
 	});
 	try {
-		expect(loadPreferences()).toEqual(null);
+		expect(loadPreferences()).toMatchObject({ timezone: 'UTC', groupBy: 'tag', preset: '90D' });
 	} finally {
 		uninstallStubStorage();
 	}
 });
 
-test('loadPreferences — invalid preset label is rejected', () => {
+test('loadPreferences - invalid preset label falls back independently', () => {
 	const { setItems } = installStubStorage();
 	setItems[STORAGE_KEY] = JSON.stringify({
 		version: 1,
@@ -172,7 +172,7 @@ test('loadPreferences — invalid preset label is rejected', () => {
 		preset: 'INVALID'
 	});
 	try {
-		expect(loadPreferences()).toEqual(null);
+		expect(loadPreferences()).toMatchObject({ timezone: 'UTC', groupBy: 'tag', preset: '90D' });
 	} finally {
 		uninstallStubStorage();
 	}
@@ -198,9 +198,9 @@ test('loadPreferences — rejects unknown lens values', () => {
 	const { setItems } = installStubStorage();
 	try {
 		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ projectKinds: ['bogus'] as any }));
-		expect(loadPreferences()).toEqual(null);
+		expect(loadPreferences()).toMatchObject({ groupBy: 'tag', preset: '90D' });
 		setItems[STORAGE_KEY] = JSON.stringify(validPrefs({ includeCanceled: 'yes' as any }));
-		expect(loadPreferences()).toEqual(null);
+		expect(loadPreferences()).toMatchObject({ groupBy: 'tag', preset: '90D' });
 	} finally {
 		uninstallStubStorage();
 	}
@@ -215,6 +215,90 @@ test('loadPreferences — ignores the retired boolean toggles', () => {
 			includeCanceled: true
 		});
 		expect(loadPreferences()?.groupBy).toEqual('tag');
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('stale fields preserve valid filters and restore sensible defaults independently', () => {
+	const { setItems } = installStubStorage();
+	setItems[STORAGE_KEY] = JSON.stringify({
+		...validPrefs(),
+		timezone: 'invalid',
+		groupBy: 'removed',
+		preset: '30D',
+		includeCanceled: true,
+		flowBucket: 'month'
+	});
+	try {
+		expect(loadPreferences()).toMatchObject({
+			timezone: 'America/New_York',
+			groupBy: 'tag',
+			preset: '30D',
+			includeCanceled: true,
+			flowBucket: 'month'
+		});
+	} finally {
+		uninstallStubStorage();
+	}
+});
+test.each([
+	['2026-02-30', '2026-03-05'],
+	['2026-04-05', '2026-04-01']
+])('invalid custom dates fall back without losing filters', (dateStart, dateEnd) => {
+	const { setItems } = installStubStorage();
+	setItems[STORAGE_KEY] = JSON.stringify({
+		...validPrefs(),
+		preset: null,
+		dateStart,
+		dateEnd,
+		chartMode: 'rate'
+	});
+	try {
+		expect(loadPreferences()).toMatchObject({ preset: '90D', chartMode: 'rate' });
+	} finally {
+		uninstallStubStorage();
+	}
+});
+test('denied or full storage cannot break the dashboard', () => {
+	installStubStorage();
+	globalThis.localStorage.getItem = () => {
+		throw new Error('denied');
+	};
+	globalThis.localStorage.setItem = () => {
+		throw new Error('full');
+	};
+	try {
+		expect(loadPreferences()).toBeNull();
+		expect(() => savePreferences(validPrefs())).not.toThrow();
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('lens recovery retains known choices and an empty lens restores all', () => {
+	const { setItems } = installStubStorage();
+	try {
+		setItems[STORAGE_KEY] = JSON.stringify({ ...validPrefs(), projectKinds: ['none', 'removed'] });
+		expect(loadPreferences()?.projectKinds).toEqual(['none']);
+		setItems[STORAGE_KEY] = JSON.stringify({ ...validPrefs(), projectKinds: [] });
+		expect(loadPreferences()?.projectKinds).toEqual(['project', 'none']);
+	} finally {
+		uninstallStubStorage();
+	}
+});
+test('relative presets discard old literal dates while a valid leap-day custom selection survives', () => {
+	const { setItems } = installStubStorage();
+	try {
+		setItems[STORAGE_KEY] = JSON.stringify({
+			...validPrefs(),
+			dateStart: '2020-01-01',
+			dateEnd: '2020-02-01'
+		});
+		expect(loadPreferences()).toEqual(validPrefs());
+		const custom = validPrefs({ preset: null, dateStart: '2024-02-29', dateEnd: '2024-03-01' });
+		savePreferences(custom);
+		expect(loadPreferences()).toEqual(custom);
 	} finally {
 		uninstallStubStorage();
 	}
