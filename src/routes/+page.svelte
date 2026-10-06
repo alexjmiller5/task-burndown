@@ -791,8 +791,7 @@
 				{#if groupBy !== 'project'}
 					<Select.Root
 						type="multiple"
-						value={projectKinds}
-						onValueChange={(v) => (projectKinds = pickKinds(PROJECT_KINDS, v))}
+						bind:value={() => projectKinds, (v) => (projectKinds = pickKinds(PROJECT_KINDS, v))}
 					>
 						<Select.Trigger
 							class={TRIGGER_CLASS}
