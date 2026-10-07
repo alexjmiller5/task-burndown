@@ -39,7 +39,8 @@ export function getLifeConfig(env: LifeEnv): Config | null {
 	const local = (globalThis as { process?: { env?: LifeEnv } }).process?.env;
 	const raw = env.LIFE_TASKS_CONFIG ?? local?.LIFE_TASKS_CONFIG;
 	if (!raw) return null;
-	const binding = JSON.parse(raw) as Binding;
+	const binding = JSON.parse(raw) as Binding | null;
+	if (binding === null) return null;
 	if (
 		!binding ||
 		!identifier(binding.table) ||

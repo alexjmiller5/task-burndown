@@ -47,7 +47,7 @@ count individually, so a Notion view hiding subtasks can show a smaller total.
 
 ## Secrets
 
-`.env.tpl` holds op:// references (safe to commit). Local dev secrets are injected by `just dev` (`op run --env-file=.env.tpl -- bun run dev`). Production secret (`NOTION_API_KEY`) is pushed to the Worker via `just sync-secrets` or the GHA deploy workflow.
+`.env.tpl` holds op:// references (safe to commit). Local dev secrets are injected by `just dev` (`op run --env-file=.env.tpl -- bun run dev`). All server settings come from the owning ENV item and are pushed to the Worker via `just sync-secrets` or the GHA deploy workflow.
 
 ## Deployment
 
@@ -104,7 +104,7 @@ browser data removes the offline copy; a first visit still needs internet access
 ## Life Data reader
 
 Set server-only `LIFE_TASKS_CONFIG` (JSON), `LIFE_HUB_URL` and a dedicated
-`LIFE_HUB_TOKEN` to select Life Data. With no mapping, the Notion reader remains
+`LIFE_HUB_TOKEN` to select Life Data. With no mapping or JSON `null`, the Notion reader remains
 selected. Malformed or incomplete Life configuration fails closed. The token
 needs read access only to the configured task and project columns, including
 `id`, `updated_at` and `deleted_at`. It is never returned to the browser.

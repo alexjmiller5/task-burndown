@@ -90,7 +90,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 
 ## Secrets
 
-- `.env.tpl` — canonical secrets manifest (op:// references, safe to commit). Single entry: `NOTION_API_KEY`.
+- `.env.tpl` - canonical secrets manifest (op:// references, safe to commit). The owning ENV item supplies `NOTION_API_KEY`, `LIFE_TASKS_CONFIG`, `LIFE_HUB_URL` and `LIFE_HUB_TOKEN`.
 - Local dev: `just dev` = `op run --env-file=.env.tpl -- bun run dev`.
 - Production: `just sync-secrets` (or the GHA deploy workflow) runs `scripts/sync-secrets.sh` to push Worker secrets via `wrangler secret put`.
 - 1Password vault: `Task Burndown`; service account: `task-burndown-ci` (read-only to that vault); SA token = repo GH secret `OP_SERVICE_ACCOUNT_TOKEN`.
@@ -182,7 +182,7 @@ completion date. Open tasks without a due date still count from their creation.
 `src/lib/server/life-data.ts` validates the runtime `LIFE_TASKS_CONFIG` mapping
 and reads only its configured columns through the supported hub API using the
 app's dedicated read credential. No backing infrastructure access or user schema
-literals belong here. Without the mapping, routes keep using Notion.
+literals belong here. Without the mapping or with JSON `null`, routes keep using Notion.
 Life refresh always requests the bounded full-sync path. `src/lib/data/full-sync.ts`
 owns all-pages-before-publication, later-page tombstone removal, binding identity
 and cursor guards. An old deletion-sweep client receives 409 under Life Data and
