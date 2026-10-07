@@ -39,6 +39,7 @@ const reply = (rows: unknown[], next_cursor: string | null = null) =>
 
 test('unconfigured stays on Notion; partial and malformed Life bindings fail closed', () => {
 	expect(getLifeConfig({})).toBeNull();
+	expect(getLifeConfig({ LIFE_TASKS_CONFIG: 'null' })).toBeNull();
 	expect(() => getLifeConfig({ LIFE_TASKS_CONFIG: '{}' })).toThrow();
 	expect(() => getLifeConfig({ ...env, LIFE_HUB_TOKEN: '' })).toThrow();
 	expect(() =>
