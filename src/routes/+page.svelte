@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { fullSync as syncFullCache } from '$lib/data/full-sync.js';
 	import { onMount } from 'svelte';
 	import { readDashboard } from '$lib/offline';
 	import dayjs from 'dayjs';
@@ -379,35 +380,9 @@
 		refreshError = null;
 		syncProgress = 0;
 		try {
-			let merged: ParsedData | null = null;
-			let cursor: string | null = null;
-			do {
-				const qs: string = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-				const res = await fetch(`/api/refresh-chunk${qs}`, { method: 'POST' });
-				if (!res.ok) {
-					refreshError = `${res.status}`;
-					return;
-				}
-				const { nextCursor, ...chunk } = (await res.json()) as ParsedData & {
-					nextCursor: string | null;
-				};
-				merged = merged ? mergeParsedData(merged, chunk) : chunk;
-				cursor = nextCursor;
+			const cacheData = await syncFullCache(fetch, () => {
 				syncProgress += 1;
-			} while (cursor);
-			const cacheData: TaskCache = {
-				lastFullRefreshAt: new Date().toISOString(),
-				...merged!
-			};
-			const put = await fetch('/api/cache', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(cacheData)
 			});
-			if (!put.ok) {
-				refreshError = `${put.status}`;
-				return;
-			}
 			applyParsed(cacheData);
 			await loadTasks(true);
 		} catch (e) {
@@ -600,15 +575,16 @@
 					>
 				</h1>
 				<p class="text-muted mt-2 font-[var(--font-body)] text-sm sm:text-base">
-					Active task trends from Notion
+					Active task trends over time
 				</p>
 			</div>
 
 			{#if refreshError}
 				<div
-					class="hidden sm:flex items-center gap-2 text-red-400 font-[var(--font-mono)] text-xs mt-2"
+					role="alert"
+					class="flex items-center gap-2 text-red-400 font-[var(--font-mono)] text-xs mt-2"
 				>
-					<span>Sync failed</span>
+					<span>Sync failed: {refreshError}</span>
 				</div>
 			{/if}
 		</div>

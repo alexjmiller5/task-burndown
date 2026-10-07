@@ -1,3 +1,4 @@
+import { getLifeConfig } from '$lib/server/life-data.js';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { getNotionApiKey } from '$lib/server/secrets.js';
@@ -8,6 +9,7 @@ import { getIncrementalSince, mergeParsedData } from '$lib/data/merge.js';
 
 export const POST: RequestHandler = async ({ platform }) => {
 	const env = platform!.env;
+	if (getLifeConfig(env)) return json({ needsFull: true });
 	const cache = await readCache(env.CACHE);
 
 	// Empty cache bootstraps via the client's chunked full-sync loop.
