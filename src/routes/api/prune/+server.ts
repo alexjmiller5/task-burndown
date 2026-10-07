@@ -1,3 +1,4 @@
+import { getLifeConfig } from '$lib/server/life-data.js';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { getNotionApiKey } from '$lib/server/secrets.js';
@@ -11,6 +12,7 @@ import { getPruneCutoff } from '$lib/data/merge.js';
  * heuristic locally when dropping cached tasks missing from the swept ids.
  */
 export const POST: RequestHandler = async ({ url, platform }) => {
+	if (getLifeConfig(platform!.env)) return json({ needsFull: true }, { status: 409 });
 	const cursor = url.searchParams.get('cursor');
 	const cutoff = url.searchParams.get('cutoff') ?? getPruneCutoff();
 	const chunk = await fetchIdChunk(getNotionApiKey(platform!.env), cursor, cutoff);

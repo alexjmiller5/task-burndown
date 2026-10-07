@@ -176,3 +176,15 @@ completion date. Open tasks without a due date still count from their creation.
 - Run the offline helper and service-worker regression tests with the normal test
   suite; verify the production build with browser networking disabled, not Vite dev
   (SvelteKit only registers the service worker in production).
+
+## Optional Life Data source
+
+`src/lib/server/life-data.ts` validates the runtime `LIFE_TASKS_CONFIG` mapping
+and reads only its configured columns through the supported hub API using the
+app's dedicated read credential. No backing infrastructure access or user schema
+literals belong here. Without the mapping, routes keep using Notion.
+Life refresh always requests the bounded full-sync path. `src/lib/data/full-sync.ts`
+owns all-pages-before-publication, later-page tombstone removal, binding identity
+and cursor guards. An old deletion-sweep client receives 409 under Life Data and
+must refresh. Task dates retain source precision and null completion dates; project
+membership is determined by refs even when its first label cannot resolve.
