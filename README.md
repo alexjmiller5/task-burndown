@@ -100,3 +100,28 @@ labelled with its save time. Reconnect loads through Cloudflare Access when your
 connection returns or your sign-in needs renewing. Refresh waits for a fresh
 response and keeps the previous chart if the request fails. Clearing the site's
 browser data removes the offline copy; a first visit still needs internet access.
+
+## Life Data reader
+
+Set server-only `LIFE_TASKS_CONFIG` (JSON), `LIFE_HUB_URL` and a dedicated
+`LIFE_HUB_TOKEN` to select Life Data. With no mapping, the Notion reader remains
+selected. Malformed or incomplete Life configuration fails closed. The token
+needs read access only to the configured task and project columns, including
+`id`, `updated_at` and `deleted_at`. It is never returned to the browser.
+
+The mapping contains `table`, `projects: {table, title}`, `tagColors` and
+`columns` with these semantic keys: `created`, `completed`, `dueDate`, `status`,
+`tags`, `priority`, `projectIds`, `aiCompleted`. Values are catalog column IDs;
+`created` must identify the original creation timestamp. Tag colors are explicit
+runtime preferences, preserving the source palette. Store these settings using
+the deployment's normal secret/configuration interface, not in source code.
+
+Life Data refreshes scan bounded pages using the service's opaque cursor. This
+is a current scan, not a frozen snapshot or backup. The browser publishes the
+replacement cache only after every page succeeds; failures preserve the last
+complete cache. Tombstones remove prior page entries. A binding change or
+repeated cursor aborts the scan. Sync covers all tasks, including old completed
+and canceled records; the chart's existing filters still apply. Source dates and
+missing completion dates are never inferred from import or synchronization time.
+The first source-ordered project supplies the chart label; an unresolved linked
+project remains linked and displays `(Unavailable Project)`.
