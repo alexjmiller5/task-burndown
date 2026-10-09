@@ -1,10 +1,10 @@
 import type { ParsedData, Task } from '$lib/types.js';
 import { PRIORITY_ORDER } from '$lib/data/parser.js';
 
-export type LifeEnv = {
-	LIFE_TASKS_CONFIG?: string;
-	LIFE_HUB_URL?: string;
-	LIFE_HUB_TOKEN?: string;
+export type SomaEnv = {
+	SOMA_TASKS_CONFIG?: string;
+	SOMA_HUB_URL?: string;
+	SOMA_HUB_TOKEN?: string;
 };
 type Field =
 	| 'created'
@@ -35,9 +35,9 @@ const fields: Field[] = [
 const identifier = (value: unknown): value is string =>
 	typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 
-export function getLifeConfig(env: LifeEnv): Config | null {
-	const local = (globalThis as { process?: { env?: LifeEnv } }).process?.env;
-	const raw = env.LIFE_TASKS_CONFIG ?? local?.LIFE_TASKS_CONFIG;
+export function getSomaConfig(env: SomaEnv): Config | null {
+	const local = (globalThis as { process?: { env?: SomaEnv } }).process?.env;
+	const raw = env.SOMA_TASKS_CONFIG ?? local?.SOMA_TASKS_CONFIG;
 	if (!raw) return null;
 	const binding = JSON.parse(raw) as Binding | null;
 	if (binding === null) return null;
@@ -48,17 +48,17 @@ export function getLifeConfig(env: LifeEnv): Config | null {
 		!identifier(binding.projects?.title) ||
 		fields.some((f) => !identifier(binding.columns?.[f]))
 	)
-		throw new Error('Invalid LIFE_TASKS_CONFIG mapping');
+		throw new Error('Invalid SOMA_TASKS_CONFIG mapping');
 	if (
 		!binding.tagColors ||
 		typeof binding.tagColors !== 'object' ||
 		Array.isArray(binding.tagColors) ||
 		Object.values(binding.tagColors).some((c) => typeof c !== 'string')
 	)
-		throw new Error('LIFE_TASKS_CONFIG requires tagColors');
-	const url = env.LIFE_HUB_URL ?? local?.LIFE_HUB_URL;
-	const token = env.LIFE_HUB_TOKEN ?? local?.LIFE_HUB_TOKEN;
-	if (!url || !token) throw new Error('Life Data URL and dedicated read credential are required');
+		throw new Error('SOMA_TASKS_CONFIG requires tagColors');
+	const url = env.SOMA_HUB_URL ?? local?.SOMA_HUB_URL;
+	const token = env.SOMA_HUB_TOKEN ?? local?.SOMA_HUB_TOKEN;
+	if (!url || !token) throw new Error('Soma URL and dedicated read credential are required');
 	const endpoint = new URL(url);
 	if (
 		endpoint.protocol !== 'https:' ||
@@ -67,7 +67,7 @@ export function getLifeConfig(env: LifeEnv): Config | null {
 		endpoint.search ||
 		endpoint.hash
 	)
-		throw new Error('Invalid Life Data URL');
+		throw new Error('Invalid Soma URL');
 	return { binding, url: url.replace(/\/$/, ''), token };
 }
 
@@ -106,18 +106,18 @@ async function page(
 		signal: AbortSignal.timeout(20000),
 		redirect: 'error'
 	});
-	if (!response.ok) throw new Error(`Life Data read failed (${response.status})`);
+	if (!response.ok) throw new Error(`Soma read failed (${response.status})`);
 	const body = (await response.json()) as { rows: Row[]; next_cursor: string | null };
 	if (
 		!Array.isArray(body.rows) ||
 		!(body.next_cursor === null || (typeof body.next_cursor === 'string' && body.next_cursor))
 	)
-		throw new Error('Invalid Life Data page receipt');
+		throw new Error('Invalid Soma page receipt');
 	return body;
 }
 
 /** A current paginated scan, not an immutable snapshot or backup. */
-export async function fetchLifeChunk(
+export async function fetchSomaChunk(
 	config: Config,
 	cursor: string | null,
 	fetcher: typeof fetch = fetch
