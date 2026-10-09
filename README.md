@@ -101,11 +101,11 @@ connection returns or your sign-in needs renewing. Refresh waits for a fresh
 response and keeps the previous chart if the request fails. Clearing the site's
 browser data removes the offline copy; a first visit still needs internet access.
 
-## Life Data reader
+## Soma reader
 
-Set server-only `LIFE_TASKS_CONFIG` (JSON), `LIFE_HUB_URL` and a dedicated
-`LIFE_HUB_TOKEN` to select Life Data. With no mapping or JSON `null`, the Notion reader remains
-selected. Malformed or incomplete Life configuration fails closed. The token
+Set server-only `SOMA_TASKS_CONFIG` (JSON), `SOMA_HUB_URL` and a dedicated
+`SOMA_HUB_TOKEN` to select Soma. With no mapping or JSON `null`, the Notion reader remains
+selected. Malformed or incomplete Soma configuration fails closed. The token
 needs read access only to the configured task and project columns, including
 `id`, `updated_at` and `deleted_at`. It is never returned to the browser.
 
@@ -116,7 +116,7 @@ The mapping contains `table`, `projects: {table, title}`, `tagColors` and
 runtime preferences, preserving the source palette. Store these settings using
 the deployment's normal secret/configuration interface, not in source code.
 
-Life Data refreshes scan bounded pages using the service's opaque cursor. This
+Soma refreshes scan bounded pages using the service's opaque cursor. This
 is a current scan, not a frozen snapshot or backup. The browser publishes the
 replacement cache only after every page succeeds; failures preserve the last
 complete cache. Tombstones remove prior page entries. A binding change or

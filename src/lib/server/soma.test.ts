@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { fetchLifeChunk, getLifeConfig } from './life-data.js';
+import { fetchSomaChunk, getSomaConfig } from './soma.js';
 
 const binding = {
 	table: 'work',
@@ -17,9 +17,9 @@ const binding = {
 	tagColors: { Chore: 'blue' }
 };
 const env = {
-	LIFE_TASKS_CONFIG: JSON.stringify(binding),
-	LIFE_HUB_URL: 'https://example.test',
-	LIFE_HUB_TOKEN: 'test-only'
+	SOMA_TASKS_CONFIG: JSON.stringify(binding),
+	SOMA_HUB_URL: 'https://example.test',
+	SOMA_HUB_TOKEN: 'test-only'
 };
 const row = {
 	id: 't1',
@@ -37,13 +37,13 @@ const row = {
 const reply = (rows: unknown[], next_cursor: string | null = null) =>
 	new Response(JSON.stringify({ rows, next_cursor }));
 
-test('unconfigured stays on Notion; partial and malformed Life bindings fail closed', () => {
-	expect(getLifeConfig({})).toBeNull();
-	expect(getLifeConfig({ LIFE_TASKS_CONFIG: 'null' })).toBeNull();
-	expect(() => getLifeConfig({ LIFE_TASKS_CONFIG: '{}' })).toThrow();
-	expect(() => getLifeConfig({ ...env, LIFE_HUB_TOKEN: '' })).toThrow();
+test('unconfigured stays on Notion; partial and malformed Soma bindings fail closed', () => {
+	expect(getSomaConfig({})).toBeNull();
+	expect(getSomaConfig({ SOMA_TASKS_CONFIG: 'null' })).toBeNull();
+	expect(() => getSomaConfig({ SOMA_TASKS_CONFIG: '{}' })).toThrow();
+	expect(() => getSomaConfig({ ...env, SOMA_HUB_TOKEN: '' })).toThrow();
 	expect(() =>
-		getLifeConfig({ ...env, LIFE_TASKS_CONFIG: JSON.stringify({ ...binding, columns: {} }) })
+		getSomaConfig({ ...env, SOMA_TASKS_CONFIG: JSON.stringify({ ...binding, columns: {} }) })
 	).toThrow();
 });
 
@@ -55,7 +55,7 @@ test('reads every project page and keeps original dates, missing completion, tag
 		)
 		.mockResolvedValueOnce(reply([{ id: 'p2', label: 'Beta', deleted_at: null }]))
 		.mockResolvedValueOnce(reply([row], 'tasks-page2'));
-	const result = await fetchLifeChunk(getLifeConfig(env)!, null, fetcher);
+	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(result.tasks).toEqual([
 		{
 			id: 't1',
@@ -91,7 +91,7 @@ test('passes opaque continuation unchanged, preserves timed dates and distinguis
 				{ id: 'removed', deleted_at: '2026-01-01' }
 			])
 		);
-	const result = await fetchLifeChunk(getLifeConfig(env)!, 'opaque+=cursor', fetcher);
+	const result = await fetchSomaChunk(getSomaConfig(env)!, 'opaque+=cursor', fetcher);
 	expect(JSON.parse(fetcher.mock.calls[1][1].body).after).toBe('opaque+=cursor');
 	expect(result.tasks[0]).toMatchObject({
 		dueDate: '2020-02-03T08:15:00.000Z',
@@ -116,7 +116,7 @@ test('rejects invalid page receipts, repeated project cursor, bad rows and faile
 	]) {
 		const fetcher = vi.fn();
 		for (const response of responses) fetcher.mockResolvedValueOnce(response);
-		await expect(fetchLifeChunk(getLifeConfig(env)!, null, fetcher)).rejects.toThrow();
+		await expect(fetchSomaChunk(getSomaConfig(env)!, null, fetcher)).rejects.toThrow();
 	}
 });
 
@@ -127,7 +127,7 @@ test('nullable catalog lists and checkbox remain empty rather than becoming inve
 		.mockResolvedValueOnce(
 			reply([{ ...row, labels: null, initiatives: null, ai: null, rank: null, state: null }])
 		);
-	const result = await fetchLifeChunk(getLifeConfig(env)!, null, fetcher);
+	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(result.tasks[0]).toMatchObject({
 		tags: [],
 		hasProject: false,
@@ -137,7 +137,7 @@ test('nullable catalog lists and checkbox remain empty rather than becoming inve
 	});
 });
 
-test('Notion and Life rows produce identical chart inputs and completion metrics', async () => {
+test('Notion and Soma rows produce identical chart inputs and completion metrics', async () => {
 	const { parseTasks } = await import('$lib/data/parser.js');
 	const { calculateCompletions } = await import('$lib/data/metrics.js');
 	const { applyBaseFilters } = await import('$lib/data/filters.js');
@@ -172,7 +172,7 @@ test('Notion and Life rows produce identical chart inputs and completion metrics
 		.fn()
 		.mockResolvedValueOnce(reply([{ id: 'p1', label: 'Alpha', deleted_at: null }]))
 		.mockResolvedValueOnce(reply(rows));
-	const life = await fetchLifeChunk(getLifeConfig(env)!, null, fetcher);
+	const life = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(life.tasks).toEqual(notion.tasks);
 	expect(applyBaseFilters(life.tasks).map((t) => t.id)).toEqual(['t2', 't3']);
 	expect(
