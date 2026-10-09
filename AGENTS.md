@@ -181,7 +181,9 @@ completion date. Open tasks without a due date still count from their creation.
 
 `src/lib/server/soma.ts` validates the runtime `SOMA_TASKS_CONFIG` mapping
 and reads only its configured columns through the supported hub API using the
-app's dedicated read credential. No backing infrastructure access or user schema
+app's own read credential, enrolled with the Soma profile
+`task-burndown-reader-v1` (projected task and project columns only). No backing
+infrastructure access or user schema
 literals belong here. Without the mapping or with JSON `null`, routes keep using Notion.
 Soma refresh always requests the bounded full-sync path. `src/lib/data/full-sync.ts`
 owns all-pages-before-publication, later-page tombstone removal, binding identity
