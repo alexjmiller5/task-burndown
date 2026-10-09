@@ -10,5 +10,9 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
-	"r2_buckets": [{ "binding": "CACHE", "bucket_name": "task-burndown-cache" }]
+	"r2_buckets": [{ "binding": "CACHE", "bucket_name": "task-burndown-cache" }],
+	// Workers cannot fetch a sibling workers.dev Worker over the network (CF error
+	// 1042), so the Soma hub's HTTP API is reached through a service binding; the
+	// request shape and the SOMA_HUB_TOKEN auth are unchanged.
+	"services": [{ "binding": "SOMA_HUB", "service": "soma" }]
 }
