@@ -181,3 +181,18 @@ test('Notion and Soma rows produce identical chart inputs and completion metrics
 		calculateCompletions(applyBaseFilters(notion.tasks), 'UTC', 'day', '2020-02-03', '2020-02-05')
 	);
 });
+
+test('requests use a redirect mode Cloudflare Workers accept and refuse a redirect reply', async () => {
+	const fetcher = vi
+		.fn()
+		.mockResolvedValueOnce(reply([]))
+		.mockResolvedValueOnce(reply([row]));
+	await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
+	for (const [, init] of fetcher.mock.calls) expect(init.redirect).toBe('manual');
+	const redirected = vi
+		.fn()
+		.mockResolvedValueOnce(
+			new Response(null, { status: 302, headers: { location: 'https://elsewhere.test' } })
+		);
+	await expect(fetchSomaChunk(getSomaConfig(env)!, null, redirected)).rejects.toThrow(/302/);
+});

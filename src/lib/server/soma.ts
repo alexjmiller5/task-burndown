@@ -104,7 +104,8 @@ async function page(
 			...(cursor ? { after: cursor } : {})
 		}),
 		signal: AbortSignal.timeout(20000),
-		redirect: 'error'
+		// Workers reject 'error'; a manual redirect is not ok and fails below.
+		redirect: 'manual'
 	});
 	if (!response.ok) throw new Error(`Soma read failed (${response.status})`);
 	const body = (await response.json()) as { rows: Row[]; next_cursor: string | null };
