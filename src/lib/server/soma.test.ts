@@ -131,6 +131,17 @@ test('rejects invalid page receipts, repeated project cursor, bad rows and faile
 	}
 });
 
+test('a project cursor that repeats stops the walk instead of looping', async () => {
+	const fetcher = vi
+		.fn()
+		.mockResolvedValueOnce(reply([[], 'repeat'], [[]]))
+		.mockImplementation(async () => reply([[], 'repeat']));
+	await expect(fetchSomaChunk(getSomaConfig(env)!, null, fetcher)).rejects.toThrow(
+		'Repeated project cursor'
+	);
+	expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
 test('nullable catalog lists and checkbox remain empty rather than becoming invented task facts', async () => {
 	const fetcher = vi
 		.fn()
