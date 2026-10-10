@@ -20,7 +20,16 @@ const env = {
 	SOMA_HUB_URL: 'https://hub.test',
 	SOMA_HUB_TOKEN: 'test-only'
 };
-const empty = () => new Response(JSON.stringify({ rows: [], next_cursor: null }));
+// Projects and the first task page arrive in one batched read.
+const empty = () =>
+	new Response(
+		JSON.stringify({
+			batch: [
+				{ rows: [], next_cursor: null },
+				{ rows: [], next_cursor: null }
+			]
+		})
+	);
 const event = (platformEnv: object) =>
 	({ url: new URL('http://x/api/refresh-chunk'), platform: { env: platformEnv } }) as never;
 
@@ -32,7 +41,7 @@ test('Soma reads go through the hub service binding when the Worker has one', as
 	const hub = { fetch: vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => empty()) };
 	const response = await POST(event({ ...env, SOMA_HUB: hub }));
 	expect(response.status).toBe(200);
-	expect(hub.fetch).toHaveBeenCalledTimes(2);
+	expect(hub.fetch).toHaveBeenCalledTimes(1);
 	expect(hub.fetch.mock.calls[0][0]).toBe('https://hub.test/v1/rows/pull');
 	expect(network).not.toHaveBeenCalled();
 });
@@ -41,5 +50,5 @@ test('without a binding (tests, local dev) Soma reads use the network', async ()
 	const network = vi.fn(async () => empty());
 	vi.stubGlobal('fetch', network);
 	expect((await POST(event(env))).status).toBe(200);
-	expect(network).toHaveBeenCalledTimes(2);
+	expect(network).toHaveBeenCalledTimes(1);
 });

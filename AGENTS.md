@@ -189,7 +189,12 @@ Cloudflare blocks a Worker's network fetch to a sibling workers.dev Worker (erro
 use `redirect: 'manual'` because Workers reject `'error'`. No backing
 infrastructure access or user schema
 literals belong here. Without the mapping or with JSON `null`, routes keep using Notion.
-Soma refresh always requests the bounded full-sync path. `src/lib/data/full-sync.ts`
+Soma refresh always requests the bounded full-sync path. Each chunk is one
+batched hub read (`{batch:[...]}`, 5,000 rows a request): every project plus up
+to 4,000 tasks, so a full read of ~6,000 tasks is two requests; the hub may
+answer a prefix past its byte budget, and the project walk or task page then
+follows on its own. Incremental reads (Soma's table-pull helper) need the
+profile to grant `hub_at` as well. `src/lib/data/full-sync.ts`
 owns all-pages-before-publication, later-page tombstone removal, binding identity
 and cursor guards. An old deletion-sweep client receives 409 under Soma and
 must refresh. Task dates retain source precision and null completion dates; project

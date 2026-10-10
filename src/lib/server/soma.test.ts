@@ -34,8 +34,13 @@ const row = {
 	updated_at: '2026-01-01T00:00:00.000Z',
 	deleted_at: null
 };
-const reply = (rows: unknown[], next_cursor: string | null = null) =>
-	new Response(JSON.stringify({ rows, next_cursor }));
+// One batched read answers a page per pull asked: [rows, next_cursor] each.
+const reply = (...pages: Array<[unknown[], (string | null)?]>) =>
+	new Response(
+		JSON.stringify({ batch: pages.map(([rows, next_cursor = null]) => ({ rows, next_cursor })) })
+	);
+const sent = (fetcher: ReturnType<typeof vi.fn>, call: number) =>
+	JSON.parse(fetcher.mock.calls[call][1].body).batch;
 
 test('unconfigured stays on Notion; partial and malformed Soma bindings fail closed', () => {
 	expect(getSomaConfig({})).toBeNull();
@@ -47,14 +52,16 @@ test('unconfigured stays on Notion; partial and malformed Soma bindings fail clo
 	).toThrow();
 });
 
-test('reads every project page and keeps original dates, missing completion, tags and source project order', async () => {
+test('reads every project and a task page in one batch, keeping original dates, missing completion, tags and source project order', async () => {
 	const fetcher = vi
 		.fn()
 		.mockResolvedValueOnce(
-			reply([{ id: 'p1', label: 'Alpha', deleted_at: null }], 'projects-page2')
+			reply(
+				[[{ id: 'p1', label: 'Alpha', deleted_at: null }], 'projects-page2'],
+				[[row], 'tasks-page2']
+			)
 		)
-		.mockResolvedValueOnce(reply([{ id: 'p2', label: 'Beta', deleted_at: null }]))
-		.mockResolvedValueOnce(reply([row], 'tasks-page2'));
+		.mockResolvedValueOnce(reply([[{ id: 'p2', label: 'Beta', deleted_at: null }]]));
 	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(result.tasks).toEqual([
 		{
@@ -73,26 +80,29 @@ test('reads every project page and keeps original dates, missing completion, tag
 	]);
 	expect(result.nextCursor).toBe('tasks-page2');
 	expect(result.tagColors.Chore).toBe('blue');
-	expect(JSON.parse(fetcher.mock.calls[1][1].body).after).toBe('projects-page2');
-	const body = JSON.parse(fetcher.mock.calls[2][1].body);
-	expect(body.since).toBe('');
+	expect(fetcher).toHaveBeenCalledTimes(2);
+	expect(sent(fetcher, 1)).toMatchObject([{ table: 'initiatives', after: 'projects-page2' }]);
+	const [, body] = sent(fetcher, 0);
+	expect(body).toMatchObject({ table: 'work', since: '', limit: 4000 });
 	expect(body.columns).toContain('deleted_at');
 	expect(body.columns).not.toContain('title');
 });
 
 test('passes opaque continuation unchanged, preserves timed dates and distinguishes unresolved links from unlinked', async () => {
-	const fetcher = vi
-		.fn()
-		.mockResolvedValueOnce(reply([]))
-		.mockResolvedValueOnce(
-			reply([
-				{ ...row, initiatives: '["missing"]', due: '2020-02-03T08:15:00.000Z' },
-				{ ...row, id: 't2', initiatives: '[]', ai: 0 },
-				{ id: 'removed', deleted_at: '2026-01-01' }
-			])
-		);
+	const fetcher = vi.fn().mockResolvedValueOnce(
+		reply(
+			[[]],
+			[
+				[
+					{ ...row, initiatives: '["missing"]', due: '2020-02-03T08:15:00.000Z' },
+					{ ...row, id: 't2', initiatives: '[]', ai: 0 },
+					{ id: 'removed', deleted_at: '2026-01-01' }
+				]
+			]
+		)
+	);
 	const result = await fetchSomaChunk(getSomaConfig(env)!, 'opaque+=cursor', fetcher);
-	expect(JSON.parse(fetcher.mock.calls[1][1].body).after).toBe('opaque+=cursor');
+	expect(sent(fetcher, 0)[1].after).toBe('opaque+=cursor');
 	expect(result.tasks[0]).toMatchObject({
 		dueDate: '2020-02-03T08:15:00.000Z',
 		hasProject: true,
@@ -109,10 +119,11 @@ test('passes opaque continuation unchanged, preserves timed dates and distinguis
 test('rejects invalid page receipts, repeated project cursor, bad rows and failed requests', async () => {
 	for (const responses of [
 		[new Response('{}')],
-		[reply([], 'repeat'), reply([], 'repeat')],
-		[reply([]), reply([{ ...row, labels: 'not-json' }])],
-		[reply([]), reply([{ ...row, original_created: null }])],
-		[reply([]), new Response('private error', { status: 403 })]
+		[reply([[], 'repeat'], [[]]), reply([[], 'repeat'])],
+		[reply([[]], [[{ ...row, labels: 'not-json' }]])],
+		[reply([[]], [[{ ...row, original_created: null }]])],
+		[reply([[]], [[]], [[]])],
+		[reply([[], 'projects-page2']), new Response('private error', { status: 403 })]
 	]) {
 		const fetcher = vi.fn();
 		for (const response of responses) fetcher.mockResolvedValueOnce(response);
@@ -123,9 +134,11 @@ test('rejects invalid page receipts, repeated project cursor, bad rows and faile
 test('nullable catalog lists and checkbox remain empty rather than becoming invented task facts', async () => {
 	const fetcher = vi
 		.fn()
-		.mockResolvedValueOnce(reply([]))
 		.mockResolvedValueOnce(
-			reply([{ ...row, labels: null, initiatives: null, ai: null, rank: null, state: null }])
+			reply(
+				[[]],
+				[[{ ...row, labels: null, initiatives: null, ai: null, rank: null, state: null }]]
+			)
 		);
 	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(result.tasks[0]).toMatchObject({
@@ -170,8 +183,7 @@ test('Notion and Soma rows produce identical chart inputs and completion metrics
 	);
 	const fetcher = vi
 		.fn()
-		.mockResolvedValueOnce(reply([{ id: 'p1', label: 'Alpha', deleted_at: null }]))
-		.mockResolvedValueOnce(reply(rows));
+		.mockResolvedValueOnce(reply([[{ id: 'p1', label: 'Alpha', deleted_at: null }]], [rows]));
 	const life = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(life.tasks).toEqual(notion.tasks);
 	expect(applyBaseFilters(life.tasks).map((t) => t.id)).toEqual(['t2', 't3']);
@@ -183,10 +195,7 @@ test('Notion and Soma rows produce identical chart inputs and completion metrics
 });
 
 test('requests use a redirect mode Cloudflare Workers accept and refuse a redirect reply', async () => {
-	const fetcher = vi
-		.fn()
-		.mockResolvedValueOnce(reply([]))
-		.mockResolvedValueOnce(reply([row]));
+	const fetcher = vi.fn().mockResolvedValueOnce(reply([[]], [[row]]));
 	await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	for (const [, init] of fetcher.mock.calls) expect(init.redirect).toBe('manual');
 	const redirected = vi
@@ -195,4 +204,15 @@ test('requests use a redirect mode Cloudflare Workers accept and refuse a redire
 			new Response(null, { status: 302, headers: { location: 'https://elsewhere.test' } })
 		);
 	await expect(fetchSomaChunk(getSomaConfig(env)!, null, redirected)).rejects.toThrow(/302/);
+});
+
+test('a hub over its byte budget answers the project page alone, and the task page follows', async () => {
+	const fetcher = vi
+		.fn()
+		.mockResolvedValueOnce(reply([[{ id: 'p1', label: 'Alpha', deleted_at: null }]]))
+		.mockResolvedValueOnce(reply([[row], 'tasks-page2']));
+	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
+	expect(sent(fetcher, 1)).toMatchObject([{ table: 'work' }]);
+	expect(result.tasks[0].projectName).toBe('Alpha');
+	expect(result.nextCursor).toBe('tasks-page2');
 });

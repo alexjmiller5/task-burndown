@@ -86,35 +86,45 @@ function array(value: unknown): string[] {
 	return parsed;
 }
 
-async function page(
-	config: Config,
-	table: string,
-	columns: string[],
-	cursor: string | null,
-	fetcher: typeof fetch
-) {
+type Page = { rows: Row[]; next_cursor: string | null };
+type Pull = { table: string; columns: string[]; limit: number; cursor: string | null };
+// One batched read: the hub caps a batch at 5,000 rows, and every project plus a
+// large task page fit in one request.
+const PROJECTS = 1000;
+const TASKS = 4000;
+
+async function pull(config: Config, pulls: Pull[], fetcher: typeof fetch): Promise<Page[]> {
 	const response = await fetcher(`${config.url}/v1/rows/pull`, {
 		method: 'POST',
 		headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
 		body: JSON.stringify({
-			table,
-			columns: [...new Set(['id', 'updated_at', 'deleted_at', ...columns])],
-			since: '',
-			limit: 200,
-			...(cursor ? { after: cursor } : {})
+			batch: pulls.map(({ table, columns, limit, cursor }) => ({
+				table,
+				columns: [...new Set(['id', 'updated_at', 'deleted_at', ...columns])],
+				since: '',
+				limit,
+				...(cursor ? { after: cursor } : {})
+			}))
 		}),
 		signal: AbortSignal.timeout(20000),
 		// Workers reject 'error'; a manual redirect is not ok and fails below.
 		redirect: 'manual'
 	});
 	if (!response.ok) throw new Error(`Soma read failed (${response.status})`);
-	const body = (await response.json()) as { rows: Row[]; next_cursor: string | null };
+	const body = (await response.json()) as { batch: Page[] };
+	// Past its byte budget the hub answers a prefix of the pulls asked.
 	if (
-		!Array.isArray(body.rows) ||
-		!(body.next_cursor === null || (typeof body.next_cursor === 'string' && body.next_cursor))
+		!Array.isArray(body.batch) ||
+		!body.batch.length ||
+		body.batch.length > pulls.length ||
+		body.batch.some(
+			(page) =>
+				!Array.isArray(page?.rows) ||
+				!(page.next_cursor === null || (typeof page.next_cursor === 'string' && page.next_cursor))
+		)
 	)
 		throw new Error('Invalid Soma page receipt');
-	return body;
+	return body.batch;
 }
 
 /** A current paginated scan, not an immutable snapshot or backup. */
@@ -124,27 +134,34 @@ export async function fetchSomaChunk(
 	fetcher: typeof fetch = fetch
 ): Promise<ParsedData & { nextCursor: string | null; deletedIds: string[]; sourceKey: string }> {
 	const { binding } = config;
+	const projectPull = (after: string | null): Pull => ({
+		table: binding.projects.table,
+		columns: [binding.projects.title],
+		limit: PROJECTS,
+		cursor: after
+	});
+	const taskPull: Pull = {
+		table: binding.table,
+		columns: Object.values(binding.columns),
+		limit: TASKS,
+		cursor
+	};
 	const projects = new Map<string, string>();
 	const seen = new Set<string>();
-	let projectCursor: string | null = null;
-	do {
-		const result = await page(
-			config,
-			binding.projects.table,
-			[binding.projects.title],
-			projectCursor,
-			fetcher
-		);
-		for (const row of result.rows) {
+	let [projectPage, result] = await pull(config, [projectPull(null), taskPull], fetcher);
+	for (;;) {
+		for (const row of projectPage.rows) {
 			const id = text(row.id);
 			if (row.deleted_at) projects.delete(id);
 			else projects.set(id, text(row[binding.projects.title]));
 		}
-		projectCursor = result.next_cursor;
-		if (projectCursor && seen.has(projectCursor)) throw new Error('Repeated project cursor');
-		if (projectCursor) seen.add(projectCursor);
-	} while (projectCursor);
-	const result = await page(config, binding.table, Object.values(binding.columns), cursor, fetcher);
+		const after = projectPage.next_cursor;
+		if (!after) break;
+		if (seen.has(after)) throw new Error('Repeated project cursor');
+		seen.add(after);
+		[projectPage] = await pull(config, [projectPull(after)], fetcher);
+	}
+	result ??= (await pull(config, [taskPull], fetcher))[0];
 	const tasks: Task[] = [];
 	const deletedIds: string[] = [];
 	for (const row of result.rows) {
