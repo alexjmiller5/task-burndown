@@ -1,6 +1,6 @@
 # Task Burndown
 
-A SvelteKit app that visualizes Notion task data as interactive stacked area charts over time. Runs on Cloudflare Workers, cached in R2, protected by Cloudflare Access, installable as an iOS homescreen PWA.
+A SvelteKit app that visualizes task data (Soma, or Notion) as an interactive stacked bar chart over time. Runs on Cloudflare Workers, cached in R2, protected by Cloudflare Access, installable as an iOS homescreen PWA.
 
 ## Requirements
 
@@ -37,8 +37,8 @@ For local deploys you'll also need either `bunx wrangler login` or a `CLOUDFLARE
 - On mount: `POST /api/refresh` incrementally syncs everything edited since the last sync (cache high-water mark)
 - Sync button: edits sync + deletion sweep — id-only queries (`POST /api/prune`) collect live page ids for tasks that could plausibly change (created/edited in the last 90 days, or To Do / In Progress); sweep-eligible cached tasks not in the set are dropped and the pruned cache is PUT back
 - Empty cache bootstraps via a client-driven chunked loop (`POST /api/refresh-chunk`, ~15 requests, ~20–30 s) followed by `PUT /api/cache`
-- Stacked area chart showing active task counts over time, grouped by tag, priority, or project
-- Filtering by tags, due date status, legacy cutoff, and incomplete/project toggles
+- Stacked bar chart of open task counts over time, grouped by tag, priority, project, status, age or AI completion; every tag and status in the data counts, and legend clicks hide series on that device
+- Filtering by the legacy cutoff, the Projects lens (with/without a project) and the Canceled toggle
 
 Completed or canceled tasks with no completion date are excluded from the chart
 and its metrics, since their history cannot be dated. They remain in Notion and

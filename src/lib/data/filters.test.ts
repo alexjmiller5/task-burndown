@@ -17,7 +17,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		completed: null,
 		dueDate: null,
 		status: 'To Do',
-		tags: ['Work'],
+		tags: ['Beta'],
 		priority: 'Medium',
 		projectName: '(No Project)',
 		aiCompleted: false,
@@ -31,13 +31,13 @@ const ALL: FilterOptions = { projectKinds: PROJECT_KINDS };
 
 const ids = (tasks: Task[]) => tasks.map((t) => t.id);
 
-test('applyBaseFilters always drops useless-tagged and created-less tasks', () => {
+test('applyBaseFilters drops created-less tasks and keeps every tag', () => {
 	const tasks = [
 		makeTask(),
-		makeTask({ id: 'u', tags: ['useless'] }),
+		makeTask({ id: 'g', tags: ['Gamma'] }),
 		makeTask({ id: 'n', created: '' })
 	];
-	expect(ids(applyBaseFilters(tasks))).toEqual(['task-1']);
+	expect(ids(applyBaseFilters(tasks))).toEqual(['task-1', 'g']);
 });
 
 test.each(['Completed', 'Canceled', 'Cancelled'])(

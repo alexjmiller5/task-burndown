@@ -13,7 +13,6 @@ export interface StoredPreferences {
 	groupBy: GroupBy;
 	chartMode?: ChartMode;
 	flowBucket?: FlowBucket;
-	showLegacyTags?: boolean;
 	/** Project lens: which kinds are shown (an empty list never persists - it snaps to all). */
 	projectKinds?: ProjectKind[];
 	includeCanceled?: boolean;
@@ -24,7 +23,14 @@ export interface StoredPreferences {
 	dateEnd?: string;
 }
 
-const VALID_GROUP_BY: ReadonlyArray<GroupBy> = ['tag', 'priority', 'project', 'age', 'ai'];
+const VALID_GROUP_BY: ReadonlyArray<GroupBy> = [
+	'tag',
+	'priority',
+	'project',
+	'age',
+	'ai',
+	'status'
+];
 
 function validDate(value: unknown): value is string {
 	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -71,12 +77,7 @@ function parsePreferences(parsed: unknown): StoredPreferences | null {
 		);
 		prefs.projectKinds = kinds.length ? kinds : [...PROJECT_KINDS];
 	}
-	for (const key of [
-		'showLegacyTags',
-		'includeCanceled',
-		'showCompleted',
-		'showMarkers'
-	] as const) {
+	for (const key of ['includeCanceled', 'showCompleted', 'showMarkers'] as const) {
 		if (typeof p[key] === 'boolean') prefs[key] = p[key];
 	}
 	return prefs;

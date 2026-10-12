@@ -11,8 +11,7 @@
 		type ProjectKind
 	} from '$lib/data/filters.js';
 	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
-	import { PRIORITY_ORDER } from '$lib/data/parser.js';
-	import { AGE_BAND_ORDER, AI_ORDER } from '$lib/data/calculator.js';
+	import { getCategories } from '$lib/data/calculator.js';
 	import {
 		avgDueToCompletion,
 		calculateCompletions,
@@ -42,21 +41,11 @@
 	import RangeSlider from '../components/RangeSlider.svelte';
 	import MarkerEditor from '../components/MarkerEditor.svelte';
 
-	const DEFAULT_TAGS = [
-		'Learning',
-		'Chore',
-		'Work',
-		'Westport',
-		'Social Planning',
-		'Shopping',
-		'Errand',
-		'Finances'
-	];
-
 	const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
 		{ value: 'tag', label: 'Tag' },
 		{ value: 'priority', label: 'Priority' },
 		{ value: 'project', label: 'Project' },
+		{ value: 'status', label: 'Status' },
 		{ value: 'age', label: 'Age' },
 		{ value: 'ai', label: 'AI' }
 	];
@@ -106,7 +95,6 @@
 	let activePreset: string = $state('90D');
 	let dateStart: string = $state(initial90D.start);
 	let dateEnd: string = $state(initial90D.end);
-	let showLegacyTags: boolean = $state(false);
 	// The project lens is the list of kinds currently shown. Deselecting the
 	// last entry snaps back to all (nothing selected must never render nothing).
 	let projectKinds: ProjectKind[] = $state([...PROJECT_KINDS]);
@@ -194,37 +182,17 @@
 
 	let filteredTasks = $derived(applyViewFilters(baseTasks, { projectKinds }));
 
-	let allCategories = $derived.by(() => {
-		switch (groupBy) {
-			case 'tag':
-				return allTags;
-			case 'priority':
-				return allPriorities;
-			case 'project':
-				return allProjects;
-			case 'age':
-				return [...AGE_BAND_ORDER];
-			case 'ai':
-				return [...AI_ORDER];
-		}
-	});
-
-	let selectedCategories = $derived.by(() => {
-		switch (groupBy) {
-			case 'tag':
-				return showLegacyTags
-					? new Set(allTags)
-					: new Set(DEFAULT_TAGS.filter((t) => allTags.includes(t)));
-			case 'priority':
-				return new Set(allPriorities);
-			case 'project':
-				return new Set(allProjects);
-			case 'age':
-				return new Set(AGE_BAND_ORDER);
-			case 'ai':
-				return new Set(AI_ORDER);
-		}
-	});
+	// Every value in the data counts (a new tag or status included); the legend
+	// hides series per device without changing the counts.
+	let categories = $derived(
+		getCategories(groupBy, {
+			tasks: allTasks,
+			allTags,
+			allPriorities,
+			allProjects,
+			tagColors
+		})
+	);
 
 	let hiddenByDefault = $derived((groupBy as GroupBy) === 'project' ? ['(No Project)'] : []);
 
@@ -237,26 +205,11 @@
 			minDate,
 			limitDate: SLIDER_MAX,
 			groupBy,
-			allCategories,
-			selectedCategories,
+			allCategories: categories,
+			selectedCategories: new Set(categories),
 			tz: zone
 		})
 	);
-
-	// Priorities keep their rank order (High → Low) and age bands their ramp
-	// order (oldest at the bottom of the stack); alphabetical reads as a swap.
-	let categories = $derived.by(() => {
-		switch (groupBy) {
-			case 'priority':
-				return PRIORITY_ORDER.filter((p) => selectedCategories.has(p));
-			case 'age':
-				return AGE_BAND_ORDER.filter((b) => selectedCategories.has(b));
-			case 'ai':
-				return AI_ORDER.filter((c) => selectedCategories.has(c));
-			default:
-				return [...selectedCategories].sort();
-		}
-	});
 
 	// Header stats follow the slider window: active = open count on the window's
 	// last day, the rest count tasks that were open (or resolved) inside it.
@@ -280,6 +233,14 @@
 		'(No Priority)': 'gray'
 	};
 
+	// The source palette's status colors (Notion names, like the priorities).
+	const STATUS_COLORS: Record<string, string> = {
+		'To Do': 'red',
+		'In Progress': 'blue',
+		Completed: 'green',
+		Canceled: 'gray'
+	};
+
 	let chartColors = $derived.by((): Record<string, string> => {
 		switch (groupBy) {
 			case 'tag':
@@ -292,6 +253,8 @@
 				return AGE_BAND_COLORS;
 			case 'ai':
 				return AI_COLORS;
+			case 'status':
+				return STATUS_COLORS;
 		}
 	});
 
@@ -338,7 +301,6 @@
 		const preset = activePreset;
 		const start = dateStart;
 		const end = dateEnd;
-		const legacy = showLegacyTags;
 		const projects = projectKinds;
 		const canceled = includeCanceled;
 		const done = showCompleted;
@@ -353,7 +315,6 @@
 			groupBy: grp,
 			chartMode: mode,
 			flowBucket: bucket,
-			showLegacyTags: legacy,
 			projectKinds: projects,
 			includeCanceled: canceled,
 			showCompleted: done,
@@ -559,7 +520,6 @@
 		if (stored) {
 			timezone = stored.timezone;
 			groupBy = stored.groupBy;
-			showLegacyTags = stored.showLegacyTags ?? false;
 			projectKinds = pickKinds(PROJECT_KINDS, stored.projectKinds ?? []);
 			includeCanceled = stored.includeCanceled ?? false;
 			showCompleted = stored.showCompleted ?? true;
@@ -807,30 +767,6 @@
 						{/each}
 					</Select.Content>
 				</Select.Root>
-
-				{#if groupBy === 'tag'}
-					<Button
-						variant="outline"
-						onclick={() => (showLegacyTags = !showLegacyTags)}
-						class={CHIP_BTN_CLASS}
-						style={showLegacyTags
-							? 'border-color: var(--color-bitcoin-glow-medium); background: var(--color-bitcoin-glow-soft);'
-							: 'border-color: var(--color-border-default); background: transparent;'}
-						title="Include legacy tags"
-					>
-						<div
-							class="size-1.5 rounded-full transition-colors duration-150"
-							style="background: {showLegacyTags
-								? 'var(--color-bitcoin)'
-								: 'var(--color-border-strong)'};"
-						></div>
-						<span
-							class="text-xs font-[var(--font-mono)] uppercase tracking-wider"
-							style="color: {showLegacyTags ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
-							>Legacy</span
-						>
-					</Button>
-				{/if}
 
 				{#if groupBy !== 'project'}
 					<Select.Root

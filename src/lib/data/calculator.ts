@@ -1,4 +1,4 @@
-import type { Task, TaskEvent, DayCount, GroupBy } from '$lib/types.js';
+import type { Task, TaskEvent, DayCount, GroupBy, ParsedData } from '$lib/types.js';
 import { addDays, diffDays, toLocalDateStr, type DayZone } from './timezone.ts';
 
 // Band upper bounds in days; a task crosses into the next band at each limit.
@@ -10,6 +10,30 @@ export const AGE_BAND_ORDER = [...AGE_BAND_NAMES].reverse();
 // AI involvement: finished by an agent, or not. (Notion's AI Ready queue flag
 // is deliberately not charted — too few tasks to read as anything but noise.)
 export const AI_ORDER = ['AI Completed', 'Manual'] as const;
+
+// Workflow order for the status breakdown; any other status follows alphabetically.
+export const STATUS_ORDER = ['To Do', 'In Progress', 'Completed', 'Canceled'];
+const statusKey = (task: Task) => task.status || '(No Status)';
+
+/** A group-by's categories in display order: every value the data holds. */
+export function getCategories(groupBy: GroupBy, data: ParsedData): string[] {
+	switch (groupBy) {
+		case 'tag':
+			return data.allTags;
+		case 'priority':
+			return data.allPriorities;
+		case 'project':
+			return data.allProjects;
+		case 'age':
+			return [...AGE_BAND_ORDER];
+		case 'ai':
+			return [...AI_ORDER];
+		case 'status': {
+			const present = new Set(data.tasks.map(statusKey));
+			return [...STATUS_ORDER.filter((s) => present.delete(s)), ...[...present].sort()];
+		}
+	}
+}
 
 /**
  * The day a task starts counting: its due date when it has one, else when it
@@ -44,6 +68,8 @@ export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: 
 			return [getAgeBand(task, dateStr, tz)];
 		case 'ai':
 			return [task.aiCompleted ? 'AI Completed' : 'Manual'];
+		case 'status':
+			return [statusKey(task)];
 		default:
 			throw new Error(`Unhandled groupBy: ${groupBy}`);
 	}

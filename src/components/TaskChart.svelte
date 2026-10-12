@@ -147,11 +147,15 @@
 						tension: 0.3,
 						spanGaps: true
 					},
-					...cats.map((cat, i) => {
+					// A category with nothing open in the window stays out of the
+					// legend; `i` still indexes the full list, so colors never shift.
+					...cats.flatMap((cat, i) => {
+						const data = visible.map((d) => (d[cat] as number) || 0);
+						if (!data.some((n) => n > 0)) return [];
 						const color = getSeriesColor(cat, tagColors, i);
 						return {
 							label: cat,
-							data: visible.map((d) => (d[cat] as number) || 0),
+							data,
 							backgroundColor: color.bg,
 							borderColor: color.border,
 							borderWidth: 1,

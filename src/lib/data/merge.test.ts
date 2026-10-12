@@ -39,22 +39,22 @@ test('mergeParsedData: fresh task replaces cached task with same id', () => {
 
 test('mergeParsedData: unions metadata', () => {
 	const base = makeParsed({
-		allTags: ['Chore'],
+		allTags: ['Alpha'],
 		allPriorities: ['High'],
 		allProjects: ['A'],
-		tagColors: { Chore: 'blue' }
+		tagColors: { Alpha: 'blue' }
 	});
 	const fresh = makeParsed({
-		allTags: ['Work'],
+		allTags: ['Beta'],
 		allPriorities: ['Low'],
 		allProjects: ['B'],
-		tagColors: { Work: 'red' }
+		tagColors: { Beta: 'red' }
 	});
 	const merged = mergeParsedData(base, fresh);
-	expect(merged.allTags).toEqual(['Chore', 'Work']);
+	expect(merged.allTags).toEqual(['Alpha', 'Beta']);
 	expect(merged.allPriorities).toEqual(['High', 'Low']);
 	expect(merged.allProjects).toEqual(['A', 'B']);
-	expect(merged.tagColors).toEqual({ Chore: 'blue', Work: 'red' });
+	expect(merged.tagColors).toEqual({ Alpha: 'blue', Beta: 'red' });
 });
 
 test('getIncrementalSince: earlier of the two maxima', () => {

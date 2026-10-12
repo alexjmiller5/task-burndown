@@ -89,7 +89,7 @@ test('loadPreferences — returns null when version field missing', () => {
 test('loadPreferences — round-trips preset-driven payload', () => {
 	installStubStorage();
 	try {
-		const prefs = validPrefs({ preset: '30D', groupBy: 'priority' });
+		const prefs = validPrefs({ preset: '30D', groupBy: 'status' });
 		savePreferences(prefs);
 		expect(loadPreferences()).toEqual(prefs);
 	} finally {
@@ -183,7 +183,6 @@ test('loadPreferences — round-trips lens arrays', () => {
 	try {
 		const prefs = validPrefs({
 			projectKinds: ['none'],
-			showLegacyTags: true,
 			includeCanceled: true,
 			showCompleted: false
 		});
@@ -214,7 +213,9 @@ test('loadPreferences — ignores the retired boolean toggles', () => {
 			showLegacyTags: true,
 			includeCanceled: true
 		});
-		expect(loadPreferences()?.groupBy).toEqual('tag');
+		const prefs = loadPreferences();
+		expect(prefs?.groupBy).toEqual('tag');
+		expect(prefs && 'showLegacyTags' in prefs).toBe(false);
 	} finally {
 		uninstallStubStorage();
 	}

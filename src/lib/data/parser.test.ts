@@ -15,7 +15,7 @@ function makePage(overrides: Partial<NotionPage> = {}): NotionPage {
 			'Completed Date': { date: null },
 			'Due Date': { date: null },
 			Status: { status: { name: 'Not started' } },
-			Tags: { multi_select: [{ name: 'Chore', color: 'blue' }] },
+			Tags: { multi_select: [{ name: 'Alpha', color: 'blue' }] },
 			Priority: { select: { name: 'High' } },
 			'Project Title': { rollup: { array: [] } }
 		},

@@ -20,7 +20,6 @@ export function applyBaseFilters(tasks: Task[], includeCanceled = false): Task[]
 		// A terminal status is not open backlog. Without its completion date we
 		// cannot place it on the timeline without inventing history.
 		if (!task.completed && (task.status === 'Completed' || canceled)) return false;
-		if (task.tags.includes('useless')) return false;
 		return true;
 	});
 }

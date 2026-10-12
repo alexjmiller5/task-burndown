@@ -14,8 +14,10 @@ await new Promise((r) => ws.addEventListener('open', r, { once: true }));
 let seq = 0;
 const pending = new Map();
 const ownershipWarnings = [];
+const loadWaiters = [];
 ws.addEventListener('message', ({ data }) => {
 	const m = JSON.parse(data);
+	if (m.method === 'Page.loadEventFired') loadWaiters.splice(0).forEach((resolve) => resolve());
 	if (m.method === 'Runtime.consoleAPICalled') {
 		const message = m.params.args.map((a) => a.value ?? '').join(' ');
 		if (message.includes('ownership_invalid_')) ownershipWarnings.push(message);
@@ -39,15 +41,32 @@ const evaluate = async (expression) => {
 };
 let injection;
 try {
+	// A hidden tab never finishes a list's exit animation, leaving the page click-locked.
+	await send('Page.bringToFront');
 	await send('Page.enable');
 	await send('Runtime.discardConsoleEntries');
 	await send('Runtime.enable');
 	injection = await send('Page.addScriptToEvaluateOnNewDocument', {
-		source: `(()=>{const nativeFetch=window.fetch; window.fetch=(input,init)=>{const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;if(path==='/api/tasks')return Promise.resolve(new Response(JSON.stringify({tasks:[{id:'fixture-1',created:'2025-02-01T12:00:00Z',completed:null,dueDate:null,status:'To Do',tags:['Chore'],priority:'High',projectName:'Example',hasProject:true,aiCompleted:false,lastEditedTime:'2026-10-01T12:00:00Z'}],allTags:['Chore'],allPriorities:['High'],allProjects:['Example'],tagColors:{},lastFullRefreshAt:null}),{headers:{'Content-Type':'application/json'}}));if(path==='/api/settings'){if(init?.method==='PUT'){sessionStorage.setItem('fixture-settings',init.body);window.__settingsPuts=[...(window.__settingsPuts||[]),init.body]}return Promise.resolve(new Response(sessionStorage.getItem('fixture-settings')||'{"dayStartMinutes":0}',{headers:{'Content-Type':'application/json'}}))}if(path==='/api/markers')return Promise.resolve(new Response('[]',{headers:{'Content-Type':'application/json'}}));if(path.startsWith('/api/'))return Promise.resolve(new Response(JSON.stringify({needsFull:false,freshCount:0}),{headers:{'Content-Type':'application/json'}}));return nativeFetch(input,init)};})();`
+		source: `(()=>{const nativeFetch=window.fetch; window.fetch=(input,init)=>{const path=new URL(typeof input==='string'?input:input.url,location.href).pathname;if(path==='/api/tasks')return Promise.resolve(new Response(JSON.stringify({tasks:[{id:'fixture-1',created:'2025-02-01T12:00:00Z',completed:null,dueDate:null,status:'To Do',tags:['Alpha'],priority:'High',projectName:'Example',hasProject:true,aiCompleted:false,lastEditedTime:'2026-10-01T12:00:00Z'},{id:'fixture-2',created:'2025-02-01T12:00:00Z',completed:null,dueDate:null,status:'In Progress',tags:['Gamma'],priority:'High',projectName:'Example',hasProject:true,aiCompleted:false,lastEditedTime:'2026-10-01T12:00:00Z'}],allTags:['(Untagged)','Alpha','Gamma'],allPriorities:['High'],allProjects:['Example'],tagColors:{},lastFullRefreshAt:null}),{headers:{'Content-Type':'application/json'}}));if(path==='/api/settings'){if(init?.method==='PUT'){sessionStorage.setItem('fixture-settings',init.body);window.__settingsPuts=[...(window.__settingsPuts||[]),init.body]}return Promise.resolve(new Response(sessionStorage.getItem('fixture-settings')||'{"dayStartMinutes":0}',{headers:{'Content-Type':'application/json'}}))}if(path==='/api/markers')return Promise.resolve(new Response('[]',{headers:{'Content-Type':'application/json'}}));if(path.startsWith('/api/'))return Promise.resolve(new Response(JSON.stringify({needsFull:false,freshCount:0}),{headers:{'Content-Type':'application/json'}}));return nativeFetch(input,init)};})();`
 	});
-	await send('Page.navigate', { url: origin });
-	await new Promise((r) => setTimeout(r, 1800));
 	const pause = () => new Promise((r) => setTimeout(r, 150));
+	// Poll instead of sleeping a fixed time: a loaded machine renders slowly.
+	const waitFor = async (expression, message) => {
+		for (const end = Date.now() + 15000; Date.now() < end; await pause()) {
+			if (await evaluate(expression).catch(() => false)) return;
+		}
+		assert.fail(message ?? `Timed out waiting for ${expression}`);
+	};
+	// Loaded = the controls are mounted and the fixture tasks reached the stats row.
+	const loaded = `!!document.querySelector('button[title="Group by"]')&&!!document.querySelector('section span')`;
+	const load = async (method, params) => {
+		const fired = new Promise((resolve) => loadWaiters.push(resolve));
+		await send(method, params);
+		await fired;
+		await waitFor(loaded, 'The dashboard did not finish loading');
+	};
+	const reload = () => load('Page.reload');
+	await load('Page.navigate', { url: origin });
 	const click = async (expression) => {
 		const { x, y } = await evaluate(
 			`(()=>{const r=(${expression}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`
@@ -67,23 +86,34 @@ try {
 			clickCount: 1
 		});
 	};
+	// A closed list can linger in the DOM until its exit animation ends: only the open one counts.
+	const openList = `[data-slot=select-content][data-state=open]`;
+	const listClosed = `!document.querySelector('${openList}')`;
 	const choose = async (title, option) => {
+		// A list still open or closing swallows the next trigger click.
+		await waitFor(listClosed, 'A select list stayed open');
 		await click(`document.querySelector('button[title="${title}"]')`);
-		await pause();
-		const found = await evaluate(
-			`!![...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()===${JSON.stringify(option)})`
+		await waitFor(
+			`!![...document.querySelectorAll('${openList} [role=option]')].find(e=>e.textContent.trim()===${JSON.stringify(option)})`,
+			`Missing ${title} option ${option}`
 		);
-		assert(found, `Missing ${title} option ${option}`);
+		await pause();
 		await click(
-			`[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()===${JSON.stringify(option)})`
+			`[...document.querySelectorAll('${openList} [role=option]')].find(e=>e.textContent.trim()===${JSON.stringify(option)})`
 		);
 		await pause();
 	};
+	// Tall enough that the 24-entry day start list opens without scroll buttons.
+	await send('Emulation.setDeviceMetricsOverride', {
+		width: 1440,
+		height: 1000,
+		deviceScaleFactor: 1,
+		mobile: false
+	});
 	// A zone no fixed picker entry uses, so "This device" provably follows the device.
 	await send('Emulation.setTimezoneOverride', { timezoneId: 'Asia/Tokyo' });
 	await evaluate('localStorage.clear(); sessionStorage.clear()');
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	// Rendered (visible, CSS-uppercased) trigger text, lowercased for comparison.
 	const text = async (title) =>
 		(
@@ -100,6 +130,20 @@ try {
 			`(()=>{const n=new Date();const d=Date.UTC(n.getFullYear(),n.getMonth(),n.getDate())/86400000;return n.getHours()*60+n.getMinutes()<${dayStart}?d-1:d})()`
 		);
 	const DEVICE = 'This device (Asia/Tokyo)';
+	// The headline open count, read off the stat labelled "active ...".
+	const active = () =>
+		evaluate(
+			`Number([...document.querySelectorAll('section span')].find(s=>/^active/i.test(s.textContent.trim())).previousElementSibling.textContent)`
+		);
+	assert.equal(await text('Group by'), 'tag');
+	assert.equal(await active(), 2, 'Every tag in the data counts toward Active');
+	await choose('Group by', 'Status');
+	assert.equal(await text('Group by'), 'status');
+	assert.equal(await active(), 2, 'The status breakdown keeps the same Active count');
+	await reload();
+	assert.equal(await text('Group by'), 'status', 'The status breakdown persists');
+	await choose('Group by', 'Tag');
+	console.log('PASS every tag counts toward Active; status breakdown persists');
 	assert.equal(await text('Timezone'), DEVICE.toLowerCase(), 'This device is the default');
 	assert.equal(await text('Day starts at'), 'day starts 00:00');
 	assert.equal(await endDay(), await wallDay(0));
@@ -107,8 +151,7 @@ try {
 	assert.deepEqual(await evaluate('window.__settingsPuts'), ['{"dayStartMinutes":1380}']);
 	assert.equal(await text('Day starts at'), 'day starts 23:00');
 	assert.equal(await endDay(), await wallDay(1380), 'Today follows the day start');
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.equal(await text('Day starts at'), 'day starts 23:00', 'Day start loads from the server');
 	assert.equal(await endDay(), await wallDay(1380));
 	assert.equal('dayStartMinutes' in (await prefs()), false, 'Day start is not device-local');
@@ -117,8 +160,7 @@ try {
 	await evaluate(
 		`localStorage.setItem('burndown:prefs:v1',JSON.stringify({version:1,timezone:'America/Chicago',groupBy:'priority',preset:'90D'}))`
 	);
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.equal(
 		await text('Timezone'),
 		DEVICE.toLowerCase(),
@@ -127,14 +169,12 @@ try {
 	assert.equal(await text('Group by'), 'priority', 'Other saved fields survive');
 	assert.equal((await prefs()).timezone, 'device');
 	await choose('Timezone', 'Chicago (CT)');
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.equal(await text('Timezone'), 'chicago (ct)', 'An explicit pick persists');
 	await choose('Timezone', DEVICE);
 	assert.equal((await prefs()).timezone, 'device');
 	await evaluate('localStorage.clear()');
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	console.log('PASS This device default, discard-once, shared day start through reload');
 	const projectLens = 'Which tasks count: with a project, without, or both';
 	await choose(projectLens, 'Without project');
@@ -145,8 +185,7 @@ try {
 		await evaluate(`JSON.parse(localStorage.getItem('burndown:prefs:v1')).projectKinds`),
 		['project']
 	);
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.equal(
 		await evaluate(`document.querySelector('button[title="${projectLens}"]').textContent.trim()`),
 		'With project'
@@ -169,8 +208,7 @@ try {
 	assert.equal(stored.flowBucket, 'month');
 	assert.equal(stored.groupBy, 'priority');
 	assert.equal(stored.includeCanceled, true);
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.equal(
 		await evaluate(`document.querySelector('button[title="Time bucket"]').textContent.trim()`),
 		'Month'
@@ -225,8 +263,7 @@ try {
 		'Custom'
 	);
 	const custom = await selected();
-	await send('Page.reload');
-	await new Promise((r) => setTimeout(r, 900));
+	await reload();
 	assert.deepEqual(await selected(), custom, 'Custom dates survive reload');
 	for (const [handle, key, expectedDate] of [
 		['Start date', 'End', '2025-05-01'],
@@ -235,8 +272,7 @@ try {
 		await evaluate(
 			`localStorage.setItem('burndown:prefs:v1',JSON.stringify({...JSON.parse(localStorage.getItem('burndown:prefs:v1')),preset:null,dateStart:'2025-04-01',dateEnd:'2025-05-01'}))`
 		);
-		await send('Page.reload');
-		await new Promise((r) => setTimeout(r, 900));
+		await reload();
 		const historicalView = await view();
 		await click(`document.querySelector('[aria-label="${handle}"]')`);
 		await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key });
@@ -323,14 +359,14 @@ try {
 	await pause();
 	assert.equal(
 		await evaluate(
-			`(()=>{const r=document.querySelector('[data-slot=select-content]').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})()`
+			`(()=>{const r=document.querySelector('${openList}').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth})()`
 		),
 		true,
 		'Day start list stays inside the phone viewport'
 	);
 	await shot('-open');
 	await click(
-		`[...document.querySelectorAll('[role=option]')].find(e=>e.textContent.trim()==='00:00')`
+		`[...document.querySelectorAll('${openList} [role=option]')].find(e=>e.textContent.trim()==='00:00')`
 	);
 	await pause();
 	assert.equal(await text('Day starts at'), '00:00');

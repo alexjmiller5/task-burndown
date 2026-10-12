@@ -17,7 +17,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 		completed: null,
 		dueDate: null,
 		status: 'To Do',
-		tags: ['Work'],
+		tags: ['Beta'],
 		priority: 'Medium',
 		projectName: '(No Project)',
 		aiCompleted: false,

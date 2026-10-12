@@ -15,7 +15,7 @@ const binding = {
 		projectIds: 'initiatives',
 		aiCompleted: 'ai'
 	},
-	tagColors: { Chore: 'blue' }
+	tagColors: { Alpha: 'blue' }
 };
 const env = {
 	SOMA_TASKS_CONFIG: JSON.stringify(binding),
@@ -28,7 +28,7 @@ const row = {
 	finished: null,
 	due: '2020-02-03',
 	state: 'Completed',
-	labels: '["Chore"]',
+	labels: '["Alpha"]',
 	rank: 'High',
 	initiatives: '["p1","p2"]',
 	ai: 1,
@@ -71,7 +71,7 @@ test('reads every project and a task page in one batch, keeping original dates, 
 			completed: null,
 			dueDate: '2020-02-03',
 			status: 'Completed',
-			tags: ['Chore'],
+			tags: ['Alpha'],
 			priority: 'High',
 			projectName: 'Alpha',
 			hasProject: true,
@@ -80,7 +80,7 @@ test('reads every project and a task page in one batch, keeping original dates, 
 		}
 	]);
 	expect(result.nextCursor).toBe('tasks-page2');
-	expect(result.tagColors.Chore).toBe('blue');
+	expect(result.tagColors.Alpha).toBe('blue');
 	expect(fetcher).toHaveBeenCalledTimes(2);
 	expect(sent(fetcher, 1)).toMatchObject([{ table: 'initiatives', after: 'projects-page2' }]);
 	const [, body] = sent(fetcher, 0);
@@ -184,7 +184,7 @@ test('Notion and Soma rows produce identical chart inputs and completion metrics
 				'Completed Date': { date: r.finished ? { start: r.finished } : null },
 				'Due Date': { date: { start: r.due } },
 				Status: { status: { name: r.state } },
-				Tags: { multi_select: [{ name: 'Chore', color: 'blue' }] },
+				Tags: { multi_select: [{ name: 'Alpha', color: 'blue' }] },
 				Priority: { select: { name: 'High' } },
 				'Project Title': {
 					rollup: { array: [{ type: 'title', title: [{ plain_text: 'Alpha' }] }] }
