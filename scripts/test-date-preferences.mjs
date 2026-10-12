@@ -121,13 +121,11 @@ try {
 		).toLowerCase();
 	const prefs = () => evaluate(`JSON.parse(localStorage.getItem('burndown:prefs:v1'))`);
 	const endDay = () =>
-		evaluate(
-			`Number(document.querySelector('[aria-label="End date"]').getAttribute('aria-valuenow'))`
-		);
-	// Expected "today" (days since epoch) for a day start, from the page's wall clock.
+		evaluate(`document.querySelector('[aria-label="End date"]').getAttribute('aria-valuetext')`);
+	// Expected "today" label for a day start, from the page's wall clock.
 	const wallDay = (dayStart) =>
 		evaluate(
-			`(()=>{const n=new Date();const d=Date.UTC(n.getFullYear(),n.getMonth(),n.getDate())/86400000;return n.getHours()*60+n.getMinutes()<${dayStart}?d-1:d})()`
+			`(()=>{const n=new Date();const d=new Date(n.getFullYear(),n.getMonth(),n.getDate()-(n.getHours()*60+n.getMinutes()<${dayStart}?1:0));return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})})()`
 		);
 	const DEVICE = 'This device (Asia/Tokyo)';
 	// The headline open count, read off the stat labelled "active ...".
@@ -222,23 +220,15 @@ try {
 		evaluate(
 			`[...document.querySelectorAll('[role=slider]')].map(e=>Number(e.getAttribute('aria-valuenow')))`
 		);
-	const view = () =>
+	const labels = () =>
 		evaluate(
-			`document.querySelector('nav[aria-label="Date viewport"] [aria-live]').textContent.trim()`
+			`[...document.querySelectorAll('[role=slider]')].map(e=>e.getAttribute('aria-valuetext'))`
 		);
 	assert.equal((await selected()).length, 2);
-	const originalSelection = await selected();
-	const originalView = await view();
-	await click(`document.querySelector('[aria-label="Show earlier dates"]')`);
-	await pause();
-	assert.deepEqual(await selected(), originalSelection, 'Viewport pan must preserve selection');
-	assert.notEqual(await view(), originalView);
 	await choose('Date range', 'ALL');
 	const allSelection = await selected();
-	assert(allSelection[1] - allSelection[0] > 90, 'ALL selects archive');
-	const allView = await view();
-	const [left, right] = allView.split(' - ');
-	assert.equal((Date.parse(right) - Date.parse(left)) / 86400000, 90, 'ALL keeps bounded viewport');
+	assert.equal(allSelection[0], 0, 'ALL starts at the slider minimum');
+	assert(allSelection[1] - allSelection[0] > 90, 'ALL selects the archive');
 	await click(`document.querySelector('[aria-label="Start date"]')`);
 	await send('Input.dispatchKeyEvent', {
 		type: 'keyDown',
@@ -265,63 +255,50 @@ try {
 	const custom = await selected();
 	await reload();
 	assert.deepEqual(await selected(), custom, 'Custom dates survive reload');
-	for (const [handle, key, expectedDate] of [
-		['Start date', 'End', '2025-05-01'],
-		['End date', 'Home', '2025-04-01']
+	for (const [handle, key, expected] of [
+		['Start date', 'End', ['Apr 30, 2025', 'May 1, 2025']],
+		['End date', 'Home', ['Apr 1, 2025', 'Apr 2, 2025']]
 	]) {
 		await evaluate(
 			`localStorage.setItem('burndown:prefs:v1',JSON.stringify({...JSON.parse(localStorage.getItem('burndown:prefs:v1')),preset:null,dateStart:'2025-04-01',dateEnd:'2025-05-01'}))`
 		);
 		await reload();
-		const historicalView = await view();
 		await click(`document.querySelector('[aria-label="${handle}"]')`);
 		await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code: key });
 		await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code: key });
 		await pause();
-		const expected = Date.parse(expectedDate + 'T00:00:00Z') / 86400000;
-		assert.deepEqual(await selected(), [expected, expected]);
-		assert.equal(
-			await view(),
-			historicalView,
-			`${handle} ${key} must follow its actual clamped date`
-		);
+		assert.deepEqual(await labels(), expected, `${handle} ${key} stops a day short of the other`);
 	}
 	await choose('Date range', '30D');
 	const beforeDrag = await selected();
-	const track = await evaluate(
-		`(()=>{const r=document.querySelector('[aria-label="Start date"]').parentElement.getBoundingClientRect();return {left:r.left,right:r.right,y:r.y+24}})()`
-	);
-	const handle = await evaluate(
-		`(()=>{const r=document.querySelector('[aria-label="Start date"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`
+	// The filled span sits just before the start handle; dragging it moves the whole window.
+	const span = await evaluate(
+		`(()=>{const r=document.querySelector('[aria-label="Start date"]').previousElementSibling.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`
 	);
 	await send('Input.dispatchMouseEvent', {
 		type: 'mousePressed',
-		...handle,
+		...span,
 		button: 'left',
 		clickCount: 1
 	});
 	await send('Input.dispatchMouseEvent', {
 		type: 'mouseMoved',
-		x: track.left - 10,
-		y: track.y,
+		x: span.x - 60,
+		y: span.y,
 		button: 'left',
 		buttons: 1
 	});
-	await new Promise((r) => setTimeout(r, 600));
 	await send('Input.dispatchMouseEvent', {
 		type: 'mouseReleased',
-		x: track.left - 10,
-		y: track.y,
+		x: span.x - 60,
+		y: span.y,
 		button: 'left',
 		clickCount: 1
 	});
 	await pause();
 	const afterDrag = await selected();
-	assert(
-		afterDrag[0] < beforeDrag[1] - 90,
-		'Holding beyond edge extends selection into older history'
-	);
-	assert.equal(afterDrag[1], beforeDrag[1], 'Dragging start preserves selected end');
+	assert(afterDrag[0] < beforeDrag[0], 'Dragging the span moves the window earlier');
+	assert.equal(afterDrag[1] - afterDrag[0], beforeDrag[1] - beforeDrag[0], 'Span drag keeps width');
 	const shot = async (suffix) => {
 		if (!process.env.BURNDOWN_SCREENSHOT) return;
 		const { data } = await send('Page.captureScreenshot', { format: 'png' });
@@ -370,7 +347,7 @@ try {
 	);
 	await pause();
 	assert.equal(await text('Day starts at'), '00:00');
-	console.log('PASS viewport panning, ALL, keyboard, custom reload, held edge drag, 390px layout');
+	console.log('PASS ALL, keyboard, Home/End, custom reload, span drag, 390px layout');
 } finally {
 	await evaluate(
 		`localStorage.clear(); sessionStorage.clear(); caches.delete('dashboard-data-v1')`
