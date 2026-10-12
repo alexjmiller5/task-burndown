@@ -1,8 +1,8 @@
 import type { Task, TaskEvent } from '$lib/types.js';
 import { AGE_BAND_LIMITS, getTaskStartDate } from './calculator.ts';
-import { addDays, getCurrentDateStr, toLocalDateStr } from './timezone.ts';
+import { addDays, getCurrentDateStr, toLocalDateStr, type DayZone } from './timezone.ts';
 
-export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent> {
+export function buildEventsMap(tasks: Task[], tz: DayZone): Map<string, TaskEvent> {
 	const events = new Map<string, TaskEvent>();
 
 	function addEvent(dateStr: string, type: keyof TaskEvent, task: Task) {
@@ -34,7 +34,7 @@ export function buildEventsMap(tasks: Task[], tz: string): Map<string, TaskEvent
 	return events;
 }
 
-export function getMinDate(tasks: Task[], tz: string): string {
+export function getMinDate(tasks: Task[], tz: DayZone): string {
 	if (tasks.length === 0) return getCurrentDateStr(tz);
 
 	let min = getTaskStartDate(tasks[0], tz);

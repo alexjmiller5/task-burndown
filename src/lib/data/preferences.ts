@@ -1,13 +1,14 @@
 import type { ChartMode, GroupBy } from '$lib/types.js';
 import type { FlowBucket } from './metrics';
-import { DEFAULT_TIMEZONE } from './timezone';
+import { DEVICE_TIMEZONE } from './timezone';
 import { PROJECT_KINDS, type ProjectKind } from './filters.ts';
 import { PRESET_LABELS, type PresetLabel } from './presets.ts';
 
 export const STORAGE_KEY = 'burndown:prefs:v1';
 
 export interface StoredPreferences {
-	version: 1;
+	version: 2;
+	/** An IANA zone, or DEVICE_TIMEZONE. */
 	timezone: string;
 	groupBy: GroupBy;
 	chartMode?: ChartMode;
@@ -34,9 +35,10 @@ function validDate(value: unknown): value is string {
 function parsePreferences(parsed: unknown): StoredPreferences | null {
 	if (!parsed || typeof parsed !== 'object') return null;
 	const p = parsed as Record<string, unknown>;
-	if (p.version !== 1) return null;
-	let timezone = DEFAULT_TIMEZONE;
-	if (typeof p.timezone === 'string') {
+	if (p.version !== 1 && p.version !== 2) return null;
+	let timezone = DEVICE_TIMEZONE;
+	// A version 1 timezone predates the "This device" option: drop it so the device zone applies.
+	if (p.version === 2 && typeof p.timezone === 'string') {
 		try {
 			new Intl.DateTimeFormat('en', { timeZone: p.timezone }).format();
 			timezone = p.timezone;
@@ -45,7 +47,7 @@ function parsePreferences(parsed: unknown): StoredPreferences | null {
 		}
 	}
 	const prefs: StoredPreferences = {
-		version: 1,
+		version: 2,
 		timezone,
 		groupBy: VALID_GROUP_BY.includes(p.groupBy as GroupBy) ? (p.groupBy as GroupBy) : 'tag',
 		preset: PRESET_LABELS.includes(p.preset as PresetLabel) ? (p.preset as PresetLabel) : '90D'

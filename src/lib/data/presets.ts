@@ -1,4 +1,4 @@
-import { addDays, getCurrentDateStr } from './timezone.ts';
+import { addDays, getCurrentDateStr, type DayZone } from './timezone.ts';
 
 export const PRESET_LABELS = ['7D', '30D', '90D', '1Y', 'MTD', 'YTD', 'ALL'] as const;
 export type PresetLabel = (typeof PRESET_LABELS)[number];
@@ -7,7 +7,7 @@ const ALL_START = '2025-01-10';
 
 export function getPresetRange(
 	label: PresetLabel,
-	tz: string,
+	tz: DayZone,
 	now: Date = new Date()
 ): { start: string; end: string } {
 	const today = getCurrentDateStr(tz, now);

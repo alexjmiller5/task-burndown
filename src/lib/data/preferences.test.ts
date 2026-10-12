@@ -39,7 +39,7 @@ function uninstallStubStorage() {
 
 function validPrefs(overrides: Partial<StoredPreferences> = {}): StoredPreferences {
 	return {
-		version: 1,
+		version: 2,
 		timezone: 'America/New_York',
 		groupBy: 'tag',
 		preset: '90D',
@@ -66,9 +66,9 @@ test('loadPreferences — returns null when JSON is malformed', () => {
 	}
 });
 
-test('loadPreferences — returns null when version is not 1', () => {
+test('loadPreferences - returns null for an unknown version', () => {
 	const { setItems } = installStubStorage();
-	setItems[STORAGE_KEY] = JSON.stringify({ ...validPrefs(), version: 2 });
+	setItems[STORAGE_KEY] = JSON.stringify({ ...validPrefs(), version: 3 });
 	try {
 		expect(loadPreferences()).toEqual(null);
 	} finally {
@@ -119,7 +119,7 @@ test('savePreferences — writes under the expected storage key', () => {
 		const raw = get(STORAGE_KEY);
 		expect(raw !== null).toEqual(true);
 		const parsed = JSON.parse(raw!);
-		expect(parsed.version).toEqual(1);
+		expect(parsed.version).toEqual(2);
 		expect(parsed.timezone).toEqual('America/New_York');
 	} finally {
 		uninstallStubStorage();
@@ -151,7 +151,7 @@ test('savePreferences — no-op without localStorage (SSR safety)', () => {
 test('loadPreferences - invalid groupBy falls back independently', () => {
 	const { setItems } = installStubStorage();
 	setItems[STORAGE_KEY] = JSON.stringify({
-		version: 1,
+		version: 2,
 		timezone: 'UTC',
 		groupBy: 'bogus',
 		preset: null
@@ -166,7 +166,7 @@ test('loadPreferences - invalid groupBy falls back independently', () => {
 test('loadPreferences - invalid preset label falls back independently', () => {
 	const { setItems } = installStubStorage();
 	setItems[STORAGE_KEY] = JSON.stringify({
-		version: 1,
+		version: 2,
 		timezone: 'UTC',
 		groupBy: 'tag',
 		preset: 'INVALID'
@@ -232,7 +232,7 @@ test('stale fields preserve valid filters and restore sensible defaults independ
 	});
 	try {
 		expect(loadPreferences()).toMatchObject({
-			timezone: 'America/New_York',
+			timezone: 'device',
 			groupBy: 'tag',
 			preset: '30D',
 			includeCanceled: true,
@@ -299,6 +299,32 @@ test('relative presets discard old literal dates while a valid leap-day custom s
 		const custom = validPrefs({ preset: null, dateStart: '2024-02-29', dateEnd: '2024-03-01' });
 		savePreferences(custom);
 		expect(loadPreferences()).toEqual(custom);
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('a timezone saved before "This device" existed is discarded, the rest kept', () => {
+	const { setItems } = installStubStorage();
+	try {
+		setItems[STORAGE_KEY] = JSON.stringify({
+			...validPrefs({ groupBy: 'priority' }),
+			version: 1,
+			timezone: 'America/Chicago'
+		});
+		expect(loadPreferences()).toEqual(validPrefs({ groupBy: 'priority', timezone: 'device' }));
+	} finally {
+		uninstallStubStorage();
+	}
+});
+
+test('"This device" and later explicit picks persist', () => {
+	installStubStorage();
+	try {
+		for (const timezone of ['device', 'America/Chicago']) {
+			savePreferences(validPrefs({ timezone }));
+			expect(loadPreferences()?.timezone).toEqual(timezone);
+		}
 	} finally {
 		uninstallStubStorage();
 	}

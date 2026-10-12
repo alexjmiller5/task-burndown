@@ -1,5 +1,5 @@
 import type { Task, TaskEvent, DayCount, GroupBy } from '$lib/types.js';
-import { addDays, DEFAULT_TIMEZONE, diffDays, toLocalDateStr } from './timezone.ts';
+import { addDays, diffDays, toLocalDateStr, type DayZone } from './timezone.ts';
 
 // Band upper bounds in days; a task crosses into the next band at each limit.
 export const AGE_BAND_LIMITS = [7, 30, 90, 180] as const;
@@ -17,13 +17,13 @@ export const AI_ORDER = ['AI Completed', 'Manual'] as const;
  * starts on its completion day instead, so it can't be "done before it began".
  * Everything — the chart, age bands, flows — anchors on this one date.
  */
-export function getTaskStartDate(task: Task, tz: string): string {
+export function getTaskStartDate(task: Task, tz: DayZone): string {
 	const start = task.dueDate ? toLocalDateStr(task.dueDate, tz) : toLocalDateStr(task.created, tz);
 	const completed = task.completed ? toLocalDateStr(task.completed, tz) : null;
 	return completed && completed < start ? completed : start;
 }
 
-function getAgeBand(task: Task, dateStr: string, tz: string): string {
+function getAgeBand(task: Task, dateStr: string, tz: DayZone): string {
 	const age = diffDays(getTaskStartDate(task, tz), dateStr);
 	for (let i = 0; i < AGE_BAND_LIMITS.length; i++) {
 		if (age < AGE_BAND_LIMITS[i]) return AGE_BAND_NAMES[i];
@@ -32,7 +32,7 @@ function getAgeBand(task: Task, dateStr: string, tz: string): string {
 }
 
 /** Group keys for a task as of a given day — shared by the chart and the flow view. */
-export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: string): string[] {
+export function getGroupKeys(task: Task, groupBy: GroupBy, dateStr: string, tz: DayZone): string[] {
 	switch (groupBy) {
 		case 'tag':
 			return task.tags.length > 0 ? task.tags : ['(Untagged)'];
@@ -61,7 +61,7 @@ export interface CalculateParams {
 	groupBy: GroupBy;
 	allCategories: string[];
 	selectedCategories: Set<string>;
-	tz?: string;
+	tz?: DayZone;
 }
 
 export function calculateDailyCounts(params: CalculateParams): DayCount[] {
@@ -72,7 +72,7 @@ export function calculateDailyCounts(params: CalculateParams): DayCount[] {
 		groupBy,
 		allCategories,
 		selectedCategories,
-		tz = DEFAULT_TIMEZONE
+		tz = 'UTC'
 	} = params;
 
 	if (minDate >= limitDate) return [];

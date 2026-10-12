@@ -14,29 +14,49 @@ export const TIMEZONES: TimezoneOption[] = [
 	{ id: 'Europe/London', label: 'London (UK)' }
 ];
 
-export const DEFAULT_TIMEZONE = 'America/New_York';
+/** The default picker value: the zone this device runs in, resolved at run time. */
+export const DEVICE_TIMEZONE = 'device';
+
+/**
+ * Where calendar days are counted: an IANA zone whose days start at midnight,
+ * or a zone plus `dayStart`, the wall-clock minute (0-1439) a new day begins.
+ */
+export type DayZone = string | { tz: string; dayStart: number };
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Intl.DateTimeFormat construction is expensive; cache one formatter per tz.
 const formatters = new Map<string, Intl.DateTimeFormat>();
-function getFormatter(tz: string): Intl.DateTimeFormat {
-	let f = formatters.get(tz);
+function getFormatter(tz: string, clock: boolean): Intl.DateTimeFormat {
+	const key = `${tz} ${clock}`;
+	let f = formatters.get(key);
 	if (!f) {
 		f = new Intl.DateTimeFormat('en-CA', {
 			timeZone: tz,
 			year: 'numeric',
 			month: '2-digit',
-			day: '2-digit'
+			day: '2-digit',
+			...(clock && { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 		});
-		formatters.set(tz, f);
+		formatters.set(key, f);
 	}
 	return f;
 }
 
-export function toLocalDateStr(value: string, tz: string): string {
+/** The date `instant` falls on in `zone`; wall-clock times before its day start count as the day before. */
+function dateIn(instant: Date, zone: DayZone): string {
+	const { tz, dayStart } = typeof zone === 'string' ? { tz: zone, dayStart: 0 } : zone;
+	// Midnight days need no clock; plain format is ~3x faster than formatToParts.
+	if (!dayStart) return getFormatter(tz, false).format(instant);
+	const p: Record<string, string> = {};
+	for (const { type, value } of getFormatter(tz, true).formatToParts(instant)) p[type] = value;
+	const date = `${p.year}-${p.month}-${p.day}`;
+	return Number(p.hour) * 60 + Number(p.minute) < dayStart ? addDays(date, -1) : date;
+}
+
+export function toLocalDateStr(value: string, zone: DayZone): string {
 	if (DATE_ONLY_RE.test(value)) return value;
-	return getFormatter(tz).format(new Date(value));
+	return dateIn(new Date(value), zone);
 }
 
 /** Calendar days from dateStr a to b (UTC arithmetic, DST-safe). */
@@ -56,12 +76,6 @@ export function addDays(dateStr: string, days: number): string {
 	return `${yy}-${mm}-${dd}`;
 }
 
-export function getCurrentDateStr(tz: string, now: Date = new Date()): string {
-	const formatter = new Intl.DateTimeFormat('en-CA', {
-		timeZone: tz,
-		year: 'numeric',
-		month: '2-digit',
-		day: '2-digit'
-	});
-	return formatter.format(now);
+export function getCurrentDateStr(zone: DayZone, now: Date = new Date()): string {
+	return dateIn(now, zone);
 }

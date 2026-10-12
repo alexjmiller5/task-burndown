@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import {
 	addDays,
-	DEFAULT_TIMEZONE,
+	DEVICE_TIMEZONE,
 	diffDays,
 	getCurrentDateStr,
 	TIMEZONES,
@@ -107,8 +107,53 @@ test('TIMEZONES — curated list contains expected entries', () => {
 	}
 });
 
-test('DEFAULT_TIMEZONE is America/New_York', () => {
-	expect(DEFAULT_TIMEZONE).toEqual('America/New_York');
+test('DEVICE_TIMEZONE is a picker value, not a fixed zone', () => {
+	expect(TIMEZONES.map((t) => t.id)).not.toContain(DEVICE_TIMEZONE);
+	expect(() => new Intl.DateTimeFormat('en', { timeZone: DEVICE_TIMEZONE })).toThrow();
+});
+
+// Day boundary at 03:00 in New York: a 02:59 instant still belongs to yesterday.
+const NY3 = { tz: 'America/New_York', dayStart: 180 };
+
+test('getCurrentDateStr - before the day start is still the previous date', () => {
+	expect(getCurrentDateStr(NY3, new Date('2026-10-12T06:59:00Z'))).toEqual('2026-10-11'); // 02:59 EDT
+	expect(getCurrentDateStr(NY3, new Date('2026-10-12T07:00:00Z'))).toEqual('2026-10-12'); // 03:00 EDT
+	expect(getCurrentDateStr(NY3, new Date('2026-10-12T04:00:00Z'))).toEqual('2026-10-11'); // 00:00 EDT
+});
+
+test('toLocalDateStr - timestamps bucket by the day start, date-only strings do not', () => {
+	expect(toLocalDateStr('2026-10-12T06:59:00Z', NY3)).toEqual('2026-10-11');
+	expect(toLocalDateStr('2026-10-12T07:00:00Z', NY3)).toEqual('2026-10-12');
+	expect(toLocalDateStr('2026-10-12', NY3)).toEqual('2026-10-12');
+});
+
+test('a zero day start is midnight, same as the bare zone', () => {
+	const at = new Date('2026-10-12T04:00:00Z'); // 00:00 EDT
+	expect(getCurrentDateStr({ tz: 'America/New_York', dayStart: 0 }, at)).toEqual('2026-10-12');
+	expect(getCurrentDateStr('America/New_York', at)).toEqual('2026-10-12');
+});
+
+test('day start follows wall-clock time across DST changes', () => {
+	// Spring forward 2026-03-08: 02:00 EST jumps to 03:00 EDT.
+	expect(toLocalDateStr('2026-03-08T06:59:00Z', NY3)).toEqual('2026-03-07'); // 01:59 EST
+	expect(toLocalDateStr('2026-03-08T07:00:00Z', NY3)).toEqual('2026-03-08'); // 03:00 EDT
+	expect(toLocalDateStr('2026-03-08T07:30:00Z', NY3)).toEqual('2026-03-08'); // 03:30 EDT
+	// Fall back 2026-11-01: 02:00 EDT returns to 01:00 EST.
+	expect(toLocalDateStr('2026-11-01T07:59:00Z', NY3)).toEqual('2026-10-31'); // 02:59 EST
+	expect(toLocalDateStr('2026-11-01T08:00:00Z', NY3)).toEqual('2026-11-01'); // 03:00 EST
+});
+
+test('day start rolls back across month and year boundaries', () => {
+	expect(getCurrentDateStr({ tz: 'UTC', dayStart: 180 }, new Date('2027-01-01T02:00:00Z'))).toEqual(
+		'2026-12-31'
+	);
+	expect(
+		getCurrentDateStr({ tz: 'UTC', dayStart: 1439 }, new Date('2026-03-01T23:58:00Z'))
+	).toEqual('2026-02-28');
+	// Minute precision: 23:59 already belongs to the new day.
+	expect(
+		getCurrentDateStr({ tz: 'UTC', dayStart: 1439 }, new Date('2026-03-01T23:59:00Z'))
+	).toEqual('2026-03-01');
 });
 
 test('diffDays counts calendar days between date strings', () => {

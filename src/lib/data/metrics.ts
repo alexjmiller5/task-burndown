@@ -1,6 +1,6 @@
 import type { DayCount, Task } from '$lib/types.js';
 import { getTaskStartDate } from './calculator.ts';
-import { addDays, diffDays, toLocalDateStr } from './timezone.ts';
+import { addDays, diffDays, toLocalDateStr, type DayZone } from './timezone.ts';
 
 export type FlowBucket = 'day' | 'week' | 'month';
 
@@ -41,7 +41,7 @@ function nextBucket(label: string, bucket: FlowBucket): string {
  */
 export function calculateCompletions(
 	tasks: Task[],
-	tz: string,
+	tz: DayZone,
 	bucket: FlowBucket,
 	start: string,
 	end: string
@@ -108,7 +108,7 @@ export function rollingAvgTotals(
 }
 
 /** Mean signed days from due date to completion across finished tasks; null if none. */
-export function avgDueToCompletion(tasks: Task[], tz: string): number | null {
+export function avgDueToCompletion(tasks: Task[], tz: DayZone): number | null {
 	let sum = 0;
 	let n = 0;
 	for (const t of tasks) {
@@ -120,7 +120,7 @@ export function avgDueToCompletion(tasks: Task[], tz: string): number | null {
 }
 
 /** Tasks open at some point in [start, end]: started by the end, not resolved before the start. */
-export function tasksInWindow(tasks: Task[], tz: string, start: string, end: string): Task[] {
+export function tasksInWindow(tasks: Task[], tz: DayZone, start: string, end: string): Task[] {
 	return tasks.filter((t) => {
 		if (getTaskStartDate(t, tz) > end) return false;
 		const done = t.completed ? toLocalDateStr(t.completed, tz) : null;
@@ -129,7 +129,7 @@ export function tasksInWindow(tasks: Task[], tz: string, start: string, end: str
 }
 
 /** Tasks whose completion (or cancellation) date falls in [start, end]. */
-export function tasksResolvedIn(tasks: Task[], tz: string, start: string, end: string): Task[] {
+export function tasksResolvedIn(tasks: Task[], tz: DayZone, start: string, end: string): Task[] {
 	return tasks.filter((t) => {
 		if (!t.completed) return false;
 		const done = toLocalDateStr(t.completed, tz);

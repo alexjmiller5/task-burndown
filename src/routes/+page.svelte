@@ -25,9 +25,15 @@
 	import type { ParsedData, TaskCache } from '$lib/types.js';
 	import { buildEventsMap, getMinDate } from '$lib/data/events.js';
 	import { calculateDailyCounts } from '$lib/data/calculator.js';
-	import { DEFAULT_TIMEZONE, TIMEZONES, getCurrentDateStr } from '$lib/data/timezone.js';
+	import {
+		DEVICE_TIMEZONE,
+		TIMEZONES,
+		getCurrentDateStr,
+		type DayZone
+	} from '$lib/data/timezone.js';
 	import { getPresetRange, PRESET_LABELS, type PresetLabel } from '$lib/data/presets.js';
 	import { parseMarkers, type ChartMarker } from '$lib/markers.js';
+	import { parseSettings } from '$lib/settings.js';
 	import { loadPreferences, savePreferences } from '$lib/data/preferences.js';
 	import TaskChart from '../components/TaskChart.svelte';
 	import RateChart from '../components/RateChart.svelte';
@@ -79,8 +85,24 @@
 	let allProjects: string[] = $state(['(No Project)']);
 	let tagColors: Record<string, string> = $state({});
 
-	let timezone: string = $state(DEFAULT_TIMEZONE);
-	const initial90D = getPresetRange('90D', DEFAULT_TIMEZONE);
+	const DEVICE_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	const TIMEZONE_OPTIONS = [
+		{ id: DEVICE_TIMEZONE, label: `This device (${DEVICE_ZONE})` },
+		...TIMEZONES
+	];
+	let timezone: string = $state(DEVICE_TIMEZONE);
+	let timezoneLabel = $derived(TIMEZONE_OPTIONS.find((t) => t.id === timezone)?.label);
+	// Shared across devices via /api/settings: minutes after midnight a day begins.
+	let dayStartMinutes = $state(0);
+	const DAY_START_OPTIONS = Array.from({ length: 24 }, (_, h) => h * 60);
+	const clock = (m: number) =>
+		`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+	// Every date computation counts days in this zone, from the shared day start.
+	let zone: DayZone = $derived({
+		tz: timezone === DEVICE_TIMEZONE ? DEVICE_ZONE : timezone,
+		dayStart: dayStartMinutes
+	});
+	const initial90D = getPresetRange('90D', DEVICE_ZONE);
 	let activePreset: string = $state('90D');
 	let dateStart: string = $state(initial90D.start);
 	let dateEnd: string = $state(initial90D.end);
@@ -133,6 +155,8 @@
 		bucket:
 			'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z',
 		tz: 'M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418',
+		dayStart:
+			'M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z',
 		edits: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
 		sync: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'
 	};
@@ -153,7 +177,7 @@
 	let SLIDER_MAX = $derived.by(() => {
 		// today + 14 days — gives a small future buffer without stretching the
 		// slider so wide that short ranges (7D/30D) collapse to invisible slivers.
-		const today = getCurrentDateStr(timezone);
+		const today = getCurrentDateStr(zone);
 		const [y, m, d] = today.split('-').map(Number);
 		const dt = new Date(Date.UTC(y, m - 1, d + 14));
 		return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
@@ -204,8 +228,8 @@
 
 	let hiddenByDefault = $derived((groupBy as GroupBy) === 'project' ? ['(No Project)'] : []);
 
-	let eventsMap = $derived(buildEventsMap(filteredTasks, timezone));
-	let minDate = $derived(getMinDate(filteredTasks, timezone));
+	let eventsMap = $derived(buildEventsMap(filteredTasks, zone));
+	let minDate = $derived(getMinDate(filteredTasks, zone));
 
 	let dailyCounts: DayCount[] = $derived(
 		calculateDailyCounts({
@@ -215,7 +239,7 @@
 			groupBy,
 			allCategories,
 			selectedCategories,
-			tz: timezone
+			tz: zone
 		})
 	);
 
@@ -242,11 +266,9 @@
 		return (last?.total as number | undefined) ?? 0;
 	});
 	let activeLabel = $derived(
-		dateEnd >= getCurrentDateStr(timezone)
-			? 'active now'
-			: `active ${dayjs(dateEnd).format('MMM D')}`
+		dateEnd >= getCurrentDateStr(zone) ? 'active now' : `active ${dayjs(dateEnd).format('MMM D')}`
 	);
-	let windowTasks = $derived(tasksInWindow(filteredTasks, timezone, dateStart, dateEnd));
+	let windowTasks = $derived(tasksInWindow(filteredTasks, zone, dateStart, dateEnd));
 	let taskCount = $derived(windowTasks.length);
 	let projectCount = $derived(windowTasks.filter((t) => t.hasProject).length);
 	let tagCount = $derived(new Set(windowTasks.flatMap((t) => t.tags)).size);
@@ -274,17 +296,17 @@
 	});
 
 	let completions = $derived(
-		calculateCompletions(filteredTasks, timezone, flowBucket, dateStart, dateEnd)
+		calculateCompletions(filteredTasks, zone, flowBucket, dateStart, dateEnd)
 	);
 	let avgDueToDone = $derived(
-		avgDueToCompletion(tasksResolvedIn(filteredTasks, timezone, dateStart, dateEnd), timezone)
+		avgDueToCompletion(tasksResolvedIn(filteredTasks, zone, dateStart, dateEnd), zone)
 	);
 	// Cancel rate needs the canceled tasks the Canceled chip normally hides
 	let canceledPct = $derived(
 		cancelRate(
 			tasksResolvedIn(
 				applyViewFilters(applyBaseFilters(allTasks, true), { projectKinds }),
-				timezone,
+				zone,
 				dateStart,
 				dateEnd
 			)
@@ -300,10 +322,10 @@
 	);
 
 	$effect(() => {
-		// Recompute the active preset's range when timezone changes
-		timezone;
+		// Recompute the active preset's range when the zone or day start changes
+		const z = zone;
 		if (activePreset) {
-			const range = getPresetRange(activePreset as PresetLabel, timezone);
+			const range = getPresetRange(activePreset as PresetLabel, z);
 			dateStart = range.start;
 			dateEnd = range.end;
 		}
@@ -326,7 +348,7 @@
 		const bucket = flowBucket;
 		if (!prefsLoaded) return;
 		savePreferences({
-			version: 1,
+			version: 2,
 			timezone: tz,
 			groupBy: grp,
 			chartMode: mode,
@@ -359,6 +381,32 @@
 			markers = parseMarkers(result.data);
 		} catch {
 			// ponytail: markers are decoration; a failed load just draws none
+		}
+	}
+
+	async function loadSettings(refresh = false) {
+		try {
+			const result = await readDashboard<unknown>('/api/settings', fetch, { refresh });
+			dayStartMinutes = parseSettings(result.data).dayStartMinutes;
+		} catch {
+			// ponytail: keeps the current day start; the next load retries
+		}
+	}
+
+	async function saveDayStart(value: string) {
+		const previous = dayStartMinutes;
+		dayStartMinutes = Number(value);
+		try {
+			const res = await fetch('/api/settings', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ dayStartMinutes })
+			});
+			if (!res.ok) throw new Error(`${res.status}`);
+			void loadSettings(true); // refresh the offline snapshot
+		} catch (e) {
+			dayStartMinutes = previous;
+			refreshError = `day start not saved (${(e as Error).message})`;
 		}
 	}
 
@@ -520,7 +568,7 @@
 			flowBucket = stored.flowBucket ?? 'day';
 			if (stored.preset !== null) {
 				// Preset is a *rule* — re-anchor to today in the (possibly new) tz
-				const range = getPresetRange(stored.preset, stored.timezone);
+				const range = getPresetRange(stored.preset, zone);
 				activePreset = stored.preset;
 				dateStart = range.start;
 				dateEnd = range.end;
@@ -533,6 +581,7 @@
 		prefsLoaded = true;
 
 		void loadMarkers();
+		void loadSettings();
 		await loadTasks(); // paint from R2 cache immediately, then pull edits
 		// ponytail: page-load sync is edits-only (cheap, self-healing); the
 		// deletion sweep and full sync stay manual via their buttons
@@ -736,11 +785,25 @@
 				<Select.Root type="single" bind:value={timezone}>
 					<Select.Trigger class={TRIGGER_CLASS} title="Timezone">
 						{@render controlIcon(ICONS.tz)}
-						<span>{TIMEZONES.find((t) => t.id === timezone)?.label}</span>
+						<!-- Phones get the short form so the day start fits on the same row -->
+						<span class="sm:hidden">{timezone === DEVICE_TIMEZONE ? 'Device' : timezoneLabel}</span>
+						<span class="hidden sm:inline">{timezoneLabel}</span>
 					</Select.Trigger>
 					<Select.Content class={CONTENT_CLASS}>
-						{#each TIMEZONES as tz}
+						{#each TIMEZONE_OPTIONS as tz}
 							<Select.Item value={tz.id} label={tz.label} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+
+				<Select.Root type="single" value={String(dayStartMinutes)} onValueChange={saveDayStart}>
+					<Select.Trigger class={TRIGGER_CLASS} title="Day starts at">
+						{@render controlIcon(ICONS.dayStart)}
+						<span><span class="hidden sm:inline">Day starts</span> {clock(dayStartMinutes)}</span>
+					</Select.Trigger>
+					<Select.Content class={CONTENT_CLASS}>
+						{#each DAY_START_OPTIONS as m}
+							<Select.Item value={String(m)} label={clock(m)} />
 						{/each}
 					</Select.Content>
 				</Select.Root>
@@ -857,7 +920,7 @@
 				</Button>
 				<MarkerEditor
 					{markers}
-					today={getCurrentDateStr(timezone)}
+					today={getCurrentDateStr(zone)}
 					onsaved={(m) => {
 						markers = m;
 						void loadMarkers(true);
