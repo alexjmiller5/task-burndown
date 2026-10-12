@@ -1,4 +1,4 @@
-import { getSomaConfig } from '$lib/server/soma.js';
+import { getSomaConfig, hubFetch, refreshSoma } from '$lib/server/soma.js';
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types.js';
 import { getNotionApiKey } from '$lib/server/secrets.js';
@@ -7,9 +7,17 @@ import { fetchIncrementalPages } from '$lib/server/notion.js';
 import { parseTasks } from '$lib/data/parser.js';
 import { getIncrementalSince, mergeParsedData } from '$lib/data/merge.js';
 
-export const POST: RequestHandler = async ({ platform }) => {
+export const POST: RequestHandler = async ({ url, platform }) => {
 	const env = platform!.env;
-	if (getSomaConfig(env)) return json({ needsFull: true });
+	const soma = getSomaConfig(env);
+	if (soma) {
+		const full = url.searchParams.get('full') === '1';
+		const result = await refreshSoma(soma, env.CACHE, hubFetch(env), { full });
+		// No hub_at grant: the client runs the chunked batched read instead.
+		if (!result) return json({ needsFull: true });
+		// Tombstones arrive with the cursor, so there is nothing left to sweep.
+		return json({ needsFull: false, ...result, pruned: true });
+	}
 	const cache = await readCache(env.CACHE);
 
 	// Empty cache bootstraps via the client's chunked full-sync loop.

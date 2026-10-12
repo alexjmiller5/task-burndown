@@ -418,20 +418,25 @@
 
 	// Edits sync + deletion sweep: pull all edits, fetch the set of page ids that
 	// still exist in Notion (slim id-only queries), drop cached tasks not in it.
+	// Soma re-reads every row instead (`full=1`); its deletions need no sweep.
 	async function pruneSync() {
 		isFullSyncing = true;
 		refreshError = null;
 		syncProgress = 0;
 		try {
-			const res = await fetch('/api/refresh', { method: 'POST' });
+			const res = await fetch('/api/refresh?full=1', { method: 'POST' });
 			if (!res.ok) {
 				refreshError = `${res.status}`;
 				return;
 			}
-			const meta = (await res.json()) as { needsFull: boolean };
+			const meta = (await res.json()) as { needsFull: boolean; pruned?: boolean };
 			if (meta.needsFull) {
 				isFullSyncing = false;
 				await fullSync(); // empty cache: nothing to prune, just bootstrap
+				return;
+			}
+			if (meta.pruned) {
+				await loadTasks(true);
 				return;
 			}
 

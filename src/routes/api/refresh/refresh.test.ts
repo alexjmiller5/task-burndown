@@ -96,3 +96,96 @@ test('incremental merge, cache written', async () => {
 	expect(written.tasks.length).toEqual(2);
 	expect(written.lastFullRefreshAt).toEqual('2026-07-08T00:00:00.000Z'); // unchanged by incremental
 });
+
+// --- Soma source: incremental through the table-pull cursor ---
+
+const somaEnv = {
+	SOMA_TASKS_CONFIG: JSON.stringify({
+		table: 'tasks',
+		projects: { table: 'projects', title: 'title' },
+		columns: {
+			created: 'created_at',
+			completed: 'completed_date',
+			dueDate: 'due_date',
+			status: 'status',
+			tags: 'tags',
+			priority: 'priority',
+			projectIds: 'project_ids',
+			aiCompleted: 'ai_completed'
+		},
+		tagColors: {}
+	}),
+	SOMA_HUB_URL: 'https://hub.test',
+	SOMA_HUB_TOKEN: 'test-only'
+};
+function somaBucket() {
+	const store = new Map<string, { value: string; etag: string }>();
+	let n = 0;
+	const object = (key: string) => {
+		const v = store.get(key);
+		return v ? { etag: v.etag, json: async () => JSON.parse(v.value) } : null;
+	};
+	return {
+		get: async (key: string) => object(key),
+		head: async (key: string) => object(key),
+		put: async (key: string, value: string) => {
+			store.set(key, { value, etag: `e${++n}` });
+			return { etag: `e${n}` };
+		}
+	};
+}
+const hubReply = (grant: boolean) =>
+	vi.fn(async (url: string, init: RequestInit) => {
+		const path = new URL(url).pathname;
+		if (path === '/v1/cursor')
+			return grant
+				? Response.json({
+						tables: { tasks: '', projects: '' },
+						at_mark: {},
+						pull_batch: { items: 50, rows: 5000 }
+					})
+				: new Response('{"error":"insufficient scope"}', { status: 403 });
+		const { batch } = JSON.parse(String(init.body));
+		return Response.json({ batch: batch.map(() => ({ rows: [], next_cursor: null })) });
+	});
+const somaEvent = (platformEnv: object, search = '') =>
+	({
+		url: new URL(`http://x/api/refresh${search}`),
+		platform: { env: { CACHE: somaBucket(), ...somaEnv, ...platformEnv } }
+	}) as never;
+
+test('Soma refreshes incrementally through the hub binding and reports deletions as applied', async () => {
+	const network = vi.fn();
+	vi.stubGlobal('fetch', network);
+	const hub = { fetch: hubReply(true) };
+	const body = await (await POST(somaEvent({ SOMA_HUB: hub }))).json();
+	expect(body).toMatchObject({ needsFull: false, freshCount: 0, pruned: true });
+	expect(hub.fetch.mock.calls.map((c) => new URL(c[0]).pathname)).toEqual([
+		'/v1/cursor',
+		'/v1/rows/pull'
+	]);
+	expect(network).not.toHaveBeenCalled();
+});
+
+test('?full=1 re-reads every Soma row even with a held cursor', async () => {
+	const hub = { fetch: hubReply(true) };
+	const bucket = somaBucket();
+	const event = (search = '') =>
+		({
+			url: new URL(`http://x/api/refresh${search}`),
+			platform: { env: { CACHE: bucket, ...somaEnv, SOMA_HUB: hub } }
+		}) as never;
+	await POST(event());
+	hub.fetch.mockClear();
+	await POST(event());
+	expect(hub.fetch).toHaveBeenCalledTimes(1);
+	hub.fetch.mockClear();
+	await POST(event('?full=1'));
+	expect(hub.fetch).toHaveBeenCalledTimes(2);
+});
+
+test('without the hub_at grant Soma asks the client for the chunked full read', async () => {
+	vi.stubGlobal('fetch', hubReply(false));
+	const body = await (await POST(somaEvent({}))).json();
+	expect(body).toEqual({ needsFull: true });
+});

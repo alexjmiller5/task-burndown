@@ -1,5 +1,6 @@
 import { expect, test, vi } from 'vitest';
-import { fetchSomaChunk, getSomaConfig } from './soma.js';
+import { fetchSomaChunk, getSomaConfig, PULL_KEY, refreshSoma } from './soma.js';
+import { CACHE_KEY } from './cache.js';
 
 const binding = {
 	table: 'work',
@@ -226,4 +227,206 @@ test('a hub over its byte budget answers the project page alone, and the task pa
 	expect(sent(fetcher, 1)).toMatchObject([{ table: 'work' }]);
 	expect(result.tasks[0].projectName).toBe('Alpha');
 	expect(result.nextCursor).toBe('tasks-page2');
+});
+
+// --- Incremental refresh through the table-pull cursor ---
+
+const T0 = '2026-09-30T00:00:00.000Z';
+const T1 = '2026-10-01T00:00:00.000Z';
+const T2 = '2026-10-02T00:00:00.000Z';
+const config = () => getSomaConfig(env)!;
+const live = (id: string, values: Record<string, unknown>, hub_at = T1) => ({
+	...row,
+	id,
+	initiatives: null,
+	...values,
+	hub_at
+});
+
+/** A hub serving `/v1/cursor` and batched `since` pulls over in-memory tables. */
+function fakeHub(tables: Record<string, Array<Record<string, unknown>>>, { grant = true } = {}) {
+	const calls: Array<{ path: string; body: any }> = [];
+	const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+		const path = new URL(url).pathname;
+		const body = JSON.parse(String(init.body));
+		calls.push({ path, body });
+		if (path === '/v1/cursor') {
+			if (!grant) return new Response('{"error":"insufficient scope"}', { status: 403 });
+			const marks: Record<string, string> = {};
+			const atMark: Record<string, number> = {};
+			for (const t of body.tables as string[]) {
+				const rows = tables[t] ?? [];
+				marks[t] = rows.reduce<string>((m, r) => (String(r.hub_at) > m ? String(r.hub_at) : m), '');
+				if (marks[t]) atMark[t] = rows.filter((r) => r.hub_at === marks[t]).length;
+			}
+			return Response.json({
+				tables: marks,
+				at_mark: atMark,
+				pull_batch: { items: 50, rows: 5000 }
+			});
+		}
+		return Response.json({
+			batch: body.batch.map((item: any) => {
+				const rows = (tables[item.table] ?? [])
+					.filter((r) => !item.since || String(r.hub_at) >= item.since)
+					.filter((r) => !item.after || String(r.id) > item.after)
+					.sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
+				const page = rows
+					.slice(0, item.limit)
+					.map((r) => Object.fromEntries(item.columns.map((c: string) => [c, r[c] ?? null])));
+				return { rows: page, next_cursor: rows.length > item.limit ? page.at(-1)!.id : null };
+			})
+		});
+	});
+	return { calls, fetcher: fetcher as unknown as typeof fetch, tables };
+}
+
+/** An R2 bucket whose objects carry a fresh etag per put. */
+function fakeBucket() {
+	const store = new Map<string, { text: string; etag: string }>();
+	const puts: string[] = [];
+	let n = 0;
+	const object = (key: string) => {
+		const v = store.get(key);
+		return v ? { etag: v.etag, json: async () => JSON.parse(v.text) } : null;
+	};
+	return {
+		store,
+		puts,
+		get: async (key: string) => object(key),
+		head: async (key: string) => object(key),
+		put: async (key: string, text: string) => {
+			puts.push(key);
+			store.set(key, { text, etag: `e${++n}` });
+			return { etag: `e${n}` };
+		},
+		cache: () => JSON.parse(store.get(CACHE_KEY)!.text)
+	};
+}
+const asBucket = (b: ReturnType<typeof fakeBucket>) => b as unknown as R2Bucket;
+
+function seeded() {
+	const hub = fakeHub({
+		initiatives: [
+			{ id: 'p1', label: 'Alpha', deleted_at: null, hub_at: T1 },
+			{ id: 'p2', label: 'Beta', deleted_at: null, hub_at: T0 },
+			{ id: 'p3', label: 'Gamma', deleted_at: null, hub_at: T0 }
+		],
+		work: [
+			live('t1', { initiatives: '["p1"]', state: 'To Do' }),
+			live('t2', {}),
+			live('t4', { initiatives: '["p1"]' }, T0),
+			live('t6', { initiatives: '["p3"]' }, T0)
+		]
+	});
+	return { hub, bucket: fakeBucket() };
+}
+
+test('a first incremental refresh pulls both tables in one batch and writes the cache and its cursor', async () => {
+	const { hub, bucket } = seeded();
+	const result = await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	expect(result).toMatchObject({ freshCount: 4 });
+	expect(hub.calls.map((c) => c.path)).toEqual(['/v1/cursor', '/v1/rows/pull']);
+	expect(hub.calls[1].body.batch.map((b: any) => [b.table, b.since])).toEqual([
+		['work', ''],
+		['initiatives', '']
+	]);
+	const cache = bucket.cache();
+	expect(cache.tasks.map((t: any) => [t.id, t.projectName])).toEqual([
+		['t1', 'Alpha'],
+		['t2', '(No Project)'],
+		['t4', 'Alpha'],
+		['t6', 'Gamma']
+	]);
+	expect(cache.allProjects).toEqual(['(No Project)', 'Alpha', 'Gamma']);
+	expect(cache.lastFullRefreshAt).toMatch(/^\d{4}-\d\d-\d\dT/);
+	expect(bucket.puts).toEqual([CACHE_KEY, PULL_KEY]);
+});
+
+test('a quiet refresh is one cursor request and writes nothing', async () => {
+	const { hub, bucket } = seeded();
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	hub.calls.length = 0;
+	bucket.puts.length = 0;
+	expect(await refreshSoma(config(), asBucket(bucket), hub.fetcher)).toMatchObject({
+		freshCount: 0
+	});
+	expect(hub.calls.map((c) => c.path)).toEqual(['/v1/cursor']);
+	expect(bucket.puts).toEqual([]);
+});
+
+test('later refreshes apply only arrivals: edits, new rows, tombstones and project renames', async () => {
+	const { hub, bucket } = seeded();
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	const { lastFullRefreshAt } = bucket.cache();
+	hub.tables.initiatives = [
+		{ id: 'p1', label: 'Renamed', deleted_at: null, hub_at: T2 },
+		{ id: 'p2', label: 'Beta', deleted_at: null, hub_at: T0 },
+		{ id: 'p3', label: 'Gamma', deleted_at: T2, hub_at: T2 }
+	];
+	hub.tables.work = [
+		live('t1', { initiatives: '["p1"]', state: 'In Progress' }, T2),
+		live('t2', { deleted_at: T2 }, T2),
+		live('t3', { initiatives: '["p2"]' }, T2),
+		// Untouched: only the project changes can relabel them.
+		live('t4', { initiatives: '["p1"]' }, T0),
+		live('t6', { initiatives: '["p3"]' }, T0)
+	];
+	hub.calls.length = 0;
+	const result = await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	expect(result).toEqual({ freshCount: 3 });
+
+	expect(hub.calls[1].body.batch.map((b: any) => [b.table, b.since])).toEqual([
+		['work', T1],
+		['initiatives', T1]
+	]);
+	const cache = bucket.cache();
+	expect(cache.tasks.map((t: any) => [t.id, t.status, t.projectName])).toEqual([
+		['t1', 'In Progress', 'Renamed'],
+		['t4', 'Completed', 'Renamed'],
+		['t6', 'Completed', '(Unavailable Project)'],
+		['t3', 'Completed', 'Beta']
+	]);
+	expect(cache.allProjects).toEqual(['(Unavailable Project)', 'Beta', 'Renamed']);
+	expect(cache.lastFullRefreshAt).toBe(lastFullRefreshAt);
+});
+
+test('a cache replaced outside the cursor, a changed binding or full: true re-read everything', async () => {
+	const { hub, bucket } = seeded();
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	const fullPull = () => hub.calls[1]?.body.batch.map((b: any) => b.since);
+
+	await bucket.put(CACHE_KEY, JSON.stringify({ ...bucket.cache(), tasks: [] }));
+	hub.calls.length = 0;
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	expect(fullPull()).toEqual(['', '']);
+	expect(bucket.cache().tasks).toHaveLength(4);
+
+	hub.calls.length = 0;
+	const recolored = { ...env, SOMA_TASKS_CONFIG: JSON.stringify({ ...binding, tagColors: {} }) };
+	await refreshSoma(getSomaConfig(recolored)!, asBucket(bucket), hub.fetcher);
+	expect(fullPull()).toEqual(['', '']);
+
+	hub.calls.length = 0;
+	await refreshSoma(getSomaConfig(recolored)!, asBucket(bucket), hub.fetcher, { full: true });
+	expect(fullPull()).toEqual(['', '']);
+});
+
+test('without the hub_at grant the cursor is refused, nothing is written, and the caller falls back', async () => {
+	const hub = fakeHub({ work: [live('t1', {})] }, { grant: false });
+	const bucket = fakeBucket();
+	expect(await refreshSoma(config(), asBucket(bucket), hub.fetcher)).toBeNull();
+	expect(hub.calls.map((c) => c.path)).toEqual(['/v1/cursor']);
+	expect(bucket.puts).toEqual([]);
+});
+
+test('incremental requests refuse redirects like the batched read', async () => {
+	const { hub, bucket } = seeded();
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	const init = (hub.fetcher as any).mock.calls[0][1] as RequestInit;
+	expect(init.redirect).toBe('manual');
+	const redirected = vi.fn(async () => new Response(null, { status: 302 }));
+	await expect(
+		refreshSoma(config(), asBucket(fakeBucket()), redirected as unknown as typeof fetch)
+	).rejects.toThrow('302');
 });

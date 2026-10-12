@@ -61,7 +61,7 @@ Pure TypeScript modules shared between server and client:
 No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 - `GET /api/tasks` — streams the R2 object body straight through (`new Response(obj.body)`, ~0 CPU); client parses + applies filters.
-- `POST /api/refresh` — incremental sync. Reads cache (~2.5 ms parse), fetches everything edited since the cache's own high-water mark (`getIncrementalSince` = earlier of max(created)/max(lastEditedTime)), merges tasks by id, writes cache back (~2.3 ms stringify). Self-healing: catches edits from days the app was never opened. Returns `{ needsFull: true }` only when the cache is empty; `{ needsFull: false, freshCount, lastFullRefreshAt }` otherwise.
+- `POST /api/refresh` — incremental sync (Soma: see Optional Soma source). Notion: reads cache (~2.5 ms parse), fetches everything edited since the cache's own high-water mark (`getIncrementalSince` = earlier of max(created)/max(lastEditedTime)), merges tasks by id, writes cache back (~2.3 ms stringify). Self-healing: catches edits from days the app was never opened. Returns `{ needsFull: true }` only when the cache is empty; `{ needsFull: false, freshCount, lastFullRefreshAt }` otherwise.
 - `POST /api/prune?cutoff=<iso>&cursor=<cursor>` — one step of the deletion sweep: returns `{ ids, nextCursor }`, up to ~1,000 live page ids per call (id-only queries). Heuristic: only sweeps tasks that could plausibly change — created/edited since the cutoff (90 days) or status To Do / In Progress (~1,250 ids, 2 calls, vs 4,300 in 5). Client loops until `nextCursor` is null, then drops sweep-eligible cached tasks missing from the swept id set and PUTs the pruned cache. Client computes the cutoff once and both sides use it, so the eligibility predicates can't disagree.
 - `POST /api/refresh-chunk?cursor=<cursor>` — one step of the chunked Full Sync loop. Fetches up to 3 Notion API pages (~3 subrequests, ~4–6 ms CPU), returns `{ tasks, tagColors, …, nextCursor }`. Client accumulates chunks until `nextCursor` is null.
 - `GET`/`PUT /api/markers` — the user's event markers: one `markers.json` object in the same R2 bucket, replaced wholesale and validated by `parseMarkers` (`src/lib/markers.ts`: ISO dates, 1-80 char label, up/down/flat, a flat band needs an end on or after its date; sorted by date). Markers are user data - edited in `MarkerEditor.svelte` (the pencil button beside the Markers chip, a shadcn Dialog), never as literals in code.
@@ -71,7 +71,7 @@ No `+page.server.ts` — chart is client-only; page has no SSR data load.
 
 1. **Page load**: client `onMount` → `GET /api/tasks` → streams 1.1 MB JSON → client parses, applies `applyBaseFilters` + view filters → renders chart.
 2. **Edits sync** (on mount and via the "Edits" button): `POST /api/refresh` — server syncs from the cache high-water mark, so this catches all edits since the last sync. If `needsFull: true` (empty cache) → falls into Full Sync bootstrap.
-3. **Sync button** (`pruneSync`): edits sync + deletion sweep — `POST /api/refresh`, `GET /api/tasks`, loop `POST /api/prune` (~5 calls) to collect live ids, drop cached tasks not in the set, `PUT /api/cache`. Guard: aborts rather than PUT if the sweep returns zero ids.
+3. **Sync button** (`pruneSync`): Soma: `POST /api/refresh?full=1` (re-read every row; no sweep, the response says `pruned`). Notion: edits sync + deletion sweep — `POST /api/refresh`, `GET /api/tasks`, loop `POST /api/prune` (~5 calls) to collect live ids, drop cached tasks not in the set, `PUT /api/cache`. Guard: aborts rather than PUT if the sweep returns zero ids.
 4. **Full Sync** (bootstrap only, when `needsFull`): client loops `POST /api/refresh-chunk` (~15 sequential requests, ~20–30 s, "Sync N" progress) until `nextCursor` is null, assembles `TaskCache`, then `PUT /api/cache`.
 5. Client updates chart reactively via Svelte 5 `$derived` pipeline.
 
@@ -189,12 +189,24 @@ Cloudflare blocks a Worker's network fetch to a sibling workers.dev Worker (erro
 use `redirect: 'manual'` because Workers reject `'error'`. No backing
 infrastructure access or user schema
 literals belong here. Without the mapping or with JSON `null`, routes keep using Notion.
-Soma refresh always requests the bounded full-sync path. Each chunk is one
-batched hub read (`{batch:[...]}`, 5,000 rows a request): every project plus up
-to 4,000 tasks, so a full read of ~6,000 tasks is two requests; the hub may
-answer a prefix past its byte budget, and the project walk or task page then
-follows on its own. Incremental reads (Soma's table-pull helper) need the
-profile to grant `hub_at` as well. `src/lib/data/full-sync.ts`
+Soma refresh is incremental (`refreshSoma`): Soma's table-pull helper
+(`src/lib/server/table-pull.js`, vendored verbatim from soma
+`core/src/table-pull.js`; refresh by copying it again) asks `/v1/cursor` once,
+and a quiet round ends there with no R2 write. Otherwise it pulls tasks and
+projects `since` the held marks in one batched request and patches the R2
+cache. R2 `soma-pull.json` holds the cursor, project labels, each task's first
+project ref (so renames and project tombstones relabel tasks) and the etag of
+the cache object it was applied to: a cache replaced any other way (a chunked
+full sync, a reseed), a changed mapping or `?full=1` (the Sync button) re-reads
+every row in one invocation. `/api/refresh` answers `pruned: true`, since
+tombstones arrive with the cursor. The cursor needs the profile to grant
+`hub_at` on both tables (`tables:read:tasks:hub_at`,
+`tables:read:projects:hub_at`); without it the cursor answers 403 and
+`/api/refresh` returns `needsFull`, so the client runs the bounded chunked read
+(`/api/refresh-chunk`): each chunk is one batched hub read (`{batch:[...]}`,
+5,000 rows a request), every project plus up to 4,000 tasks; the hub may answer
+a prefix past its byte budget, and the project walk or task page then follows
+on its own. `src/lib/data/full-sync.ts`
 owns all-pages-before-publication, later-page tombstone removal, binding identity
 and cursor guards. An old deletion-sweep client receives 409 under Soma and
 must refresh. Task dates retain source precision and null completion dates; project
