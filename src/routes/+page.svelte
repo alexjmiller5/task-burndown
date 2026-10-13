@@ -10,7 +10,6 @@
 		PROJECT_KINDS,
 		type ProjectKind
 	} from '$lib/data/filters.js';
-	import { getPruneCutoff, mergeParsedData, pruneDeletedTasks } from '$lib/data/merge.js';
 	import { getCategories } from '$lib/data/calculator.js';
 	import {
 		avgDueToCompletion,
@@ -145,7 +144,6 @@
 		tz: 'M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418',
 		dayStart:
 			'M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z',
-		edits: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
 		sync: 'M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99'
 	};
 
@@ -401,12 +399,11 @@
 		}
 	}
 
-	async function refreshEdits() {
+	async function syncTasks() {
 		isRefreshingToday = true;
 		refreshError = null;
 		try {
-			// Server syncs from the cache's own last-edited high-water mark, so
-			// this catches everything edited since the last sync — however long ago.
+			// Soma pulls new tasks, edits, tombstones, and project changes from its cursor.
 			const res = await fetch('/api/refresh', { method: 'POST' });
 			if (!res.ok) {
 				refreshError = `${res.status}`;
@@ -422,89 +419,6 @@
 			refreshError = (e as Error).message;
 		} finally {
 			isRefreshingToday = false;
-		}
-	}
-
-	// Edits sync + deletion sweep: pull all edits, fetch the set of page ids that
-	// still exist in Notion (slim id-only queries), drop cached tasks not in it.
-	// Soma re-reads every row instead (`full=1`); its deletions need no sweep.
-	async function pruneSync() {
-		isFullSyncing = true;
-		refreshError = null;
-		syncProgress = 0;
-		try {
-			const res = await fetch('/api/refresh?full=1', { method: 'POST' });
-			if (!res.ok) {
-				refreshError = `${res.status}`;
-				return;
-			}
-			const meta = (await res.json()) as { needsFull: boolean; pruned?: boolean };
-			if (meta.needsFull) {
-				isFullSyncing = false;
-				await fullSync(); // empty cache: nothing to prune, just bootstrap
-				return;
-			}
-			if (meta.pruned) {
-				await loadTasks(true);
-				return;
-			}
-
-			const tasksRes = await fetch('/api/tasks');
-			if (!tasksRes.ok) {
-				refreshError = `${tasksRes.status}`;
-				return;
-			}
-			const cacheData = (await tasksRes.json()) as TaskCache;
-
-			// One cutoff for both the server-side sweep and the local prune, so the
-			// two sides of the heuristic can never disagree.
-			const cutoff = getPruneCutoff();
-			const sweptIds = new Set<string>();
-			let cursor: string | null = null;
-			do {
-				const cursorQs: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-				const r = await fetch(`/api/prune?cutoff=${encodeURIComponent(cutoff)}${cursorQs}`, {
-					method: 'POST'
-				});
-				if (!r.ok) {
-					refreshError = `${r.status}`;
-					return;
-				}
-				const { ids, nextCursor } = (await r.json()) as {
-					ids: string[];
-					nextCursor: string | null;
-				};
-				for (const id of ids) sweptIds.add(id);
-				cursor = nextCursor;
-				syncProgress += 1;
-			} while (cursor);
-
-			// Guard: an empty sweep means something went wrong — never wipe the cache.
-			if (sweptIds.size === 0) {
-				refreshError = 'sweep returned no ids';
-				return;
-			}
-
-			const pruned: TaskCache = {
-				...cacheData,
-				tasks: pruneDeletedTasks(cacheData.tasks, sweptIds, cutoff),
-				lastFullRefreshAt: new Date().toISOString()
-			};
-			const put = await fetch('/api/cache', {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(pruned)
-			});
-			if (!put.ok) {
-				refreshError = `${put.status}`;
-				return;
-			}
-			applyParsed(pruned);
-			await loadTasks(true);
-		} catch (e) {
-			refreshError = (e as Error).message;
-		} finally {
-			isFullSyncing = false;
 		}
 	}
 
@@ -543,9 +457,8 @@
 		void loadMarkers();
 		void loadSettings();
 		await loadTasks(); // paint from R2 cache immediately, then pull edits
-		// ponytail: page-load sync is edits-only (cheap, self-healing); the
-		// deletion sweep and full sync stay manual via their buttons
-		if (navigator.onLine && !savedAt) await refreshEdits();
+		// Page load uses the same incremental sync as the Sync button.
+		if (navigator.onLine && !savedAt) await syncTasks();
 	});
 </script>
 
@@ -868,24 +781,18 @@
 			<div class="flex items-center flex-wrap gap-2 sm:gap-3">
 				<Button
 					variant="outline"
-					onclick={refreshEdits}
-					disabled={isRefreshingToday || isFullSyncing}
-					class={ACTION_BTN_CLASS}
-					title="Fetch all tasks edited since the last sync"
-				>
-					{@render controlIcon(ICONS.edits, isRefreshingToday ? 'animate-spin' : '')}
-					<span>{isRefreshingToday ? 'Syncing' : 'Edits'}</span>
-				</Button>
-
-				<Button
-					variant="outline"
-					onclick={pruneSync}
+					onclick={syncTasks}
 					disabled={isFullSyncing || isRefreshingToday}
 					class={ACTION_BTN_CLASS}
-					title="Fetch edits and remove deleted tasks (id sweep, no full re-fetch)"
+					title="Sync new tasks, changes, deletions, and project renames"
 				>
-					{@render controlIcon(ICONS.sync, isFullSyncing ? 'animate-spin' : '')}
-					<span>{isFullSyncing ? `Sync ${syncProgress}` : 'Sync'}</span>
+					{@render controlIcon(
+						ICONS.sync,
+						isFullSyncing || isRefreshingToday ? 'animate-spin' : ''
+					)}
+					<span
+						>{isFullSyncing ? `Sync ${syncProgress}` : isRefreshingToday ? 'Syncing' : 'Sync'}</span
+					>
 				</Button>
 			</div>
 		</div>

@@ -122,7 +122,7 @@ Coverage focuses on pure TS modules in `src/lib/data/` and `src/lib/server/` - t
 
 **Incremental fetching**: Instead of fetching all ~4,300 tasks, the refresh uses the earlier of `max(created)` and `max(lastEditedTime)` across cached tasks as a threshold, then queries Notion with `last_edited_time >= threshold`. Fresh tasks are merged by ID into the cache. This threshold is only sound if the cache actually contains every edit up to its own maximum — a full sync establishes that invariant and each incremental preserves it. (A historical bug synced from `start of today` instead, silently skipping edits from unopened days; a poisoned cache like that can only be repaired by a full sync.)
 
-**Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The `/api/prune` id sweep handles this cheaply: fetch live page ids (slim `filter_properties[]=title` queries) for tasks that could plausibly change, drop sweep-eligible cached tasks not in the set. Accepted tradeoff: deleting an old, settled, non-open task won't be noticed until a full sync — such tasks are assumed immutable. The Sync button runs edits sync + sweep; the full re-parse loop is only needed to bootstrap an empty cache.
+**Deletions are invisible to incremental fetch**: Notion's data source query API (version `2026-03-11`) silently excludes trashed/archived pages. The `/api/prune` id sweep handles this cheaply: fetch live page ids (slim `filter_properties[]=title` queries) for tasks that could plausibly change, drop sweep-eligible cached tasks not in the set. Accepted tradeoff: deleting an old, settled, non-open task won't be noticed until a full sync — such tasks are assumed immutable. The Notion deletion sweep remains available through `/api/prune`; the single Sync button uses `/api/refresh`, with the full re-parse loop as recovery when the server returns `needsFull`.
 
 **Effective start date**: `getTaskStartDate` (`calculator.ts`) is the one date every view anchors on — due date when set, else created, and clamped back to the completion day if the task was finished before it. Due-over-created is what makes backfilled tasks honest: entering a task months late shouldn't make a months-old obligation look new. The clamp covers deferred tasks knocked out early (~3% of completions), which used to be dropped from the chart entirely — they now open and close on the same day, netting zero open but still counting as a completion. `buildEventsMap` (start + band crossings), `getAgeBand`, and `calculateCompletions` all use it, so the burndown, the age bands and the completion overlay can't disagree about when a task began.
 
@@ -204,7 +204,7 @@ cache (a non-quiet refresh or any chunk), `fetchTagColors` posts
 profile grant `catalog:read:<table>:<tags column>` beside the column read; on a
 403 or any failure the sync still lands and tags take the fallback colors. A
 quiet refresh does not re-read colors, so a recolor shows with the next task
-change or Sync.
+change or a full cache rebuild.
 Soma refresh is incremental (`refreshSoma`): Soma's table-pull helper
 (`src/lib/server/table-pull.js`, vendored verbatim from soma
 `core/src/table-pull.js`; refresh by copying it again) asks `/v1/cursor` once,
@@ -213,7 +213,7 @@ projects `since` the held marks in one batched request and patches the R2
 cache. R2 `soma-pull.json` holds the cursor, project labels, each task's first
 project ref (so renames and project tombstones relabel tasks) and the etag of
 the cache object it was applied to: a cache replaced any other way (a chunked
-full sync, a reseed), a changed mapping or `?full=1` (the Sync button) re-reads
+full sync, a reseed), a changed mapping or an explicit `?full=1` request re-reads
 every row in one invocation. `/api/refresh` answers `pruned: true`, since
 tombstones arrive with the cursor. The cursor needs the profile to grant
 `hub_at` on both tables (`tables:read:tasks:hub_at`,
@@ -227,3 +227,8 @@ owns all-pages-before-publication, later-page tombstone removal, binding identit
 and cursor guards. An old deletion-sweep client receives 409 under Soma and
 must refresh. Task dates retain source precision and null completion dates; project
 membership is determined by refs even when its first label cannot resolve.
+
+The single Sync control preserves its refresh icon and outline style and calls
+`/api/refresh` without `full=1`. With Soma it pulls new tasks, edits, deletions,
+and project renames incrementally; `needsFull` automatically runs the chunked
+full read. The control is disabled and spins throughout either operation.
