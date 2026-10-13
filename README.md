@@ -107,14 +107,19 @@ Set server-only `SOMA_TASKS_CONFIG` (JSON), `SOMA_HUB_URL` and a dedicated
 `SOMA_HUB_TOKEN` to select Soma. With no mapping or JSON `null`, the Notion reader remains
 selected. Malformed or incomplete Soma configuration fails closed. The token
 needs read access only to the configured task and project columns, including
-`id`, `updated_at` and `deleted_at`. It is never returned to the browser.
+`id`, `updated_at` and `deleted_at`, plus `catalog:read:<table>:<tags column>`
+for tag colors. It is never returned to the browser.
 
-The mapping contains `table`, `projects: {table, title}`, `tagColors` and
+The mapping contains `table`, `projects: {table, title}` and
 `columns` with these semantic keys: `created`, `completed`, `dueDate`, `status`,
 `tags`, `priority`, `projectIds`, `aiCompleted`. Values are catalog column IDs;
-`created` must identify the original creation timestamp. Tag colors are explicit
-runtime preferences, preserving the source palette. Store these settings using
+`created` must identify the original creation timestamp. Store these settings using
 the deployment's normal secret/configuration interface, not in source code.
+
+Tag colors are the catalog's own option colors for the tags column, the same
+palette names other Soma clients show, so recoloring a tag in the catalog
+recolors its bars at the next sync that brings task changes (or Sync). Without
+the catalog grant the chart still loads, with fallback colors.
 
 Soma refreshes scan bounded pages using the service's opaque cursor. This
 is a current scan, not a frozen snapshot or backup. The browser publishes the

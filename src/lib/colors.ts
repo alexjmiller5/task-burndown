@@ -1,22 +1,26 @@
-// Series color resolution shared by TaskChart and MetricsChart.
+// Series color resolution for the bar charts.
 
 export interface SeriesColor {
 	bg: string;
 	border: string;
 }
 
-// Map Notion color names to chart-friendly RGBA values
+// The ten palette names Soma's catalog options (and Notion) use, as Iris shows
+// them, stepped as solid fills for the dark chart surface (#0f1115). All 45
+// pairs stay apart in the dataviz validator: OKLab dE >= 15.5 in normal vision,
+// >= 8.1 under protan/deutan, and every fill clears 3:1 against the surface.
+const solid = (hex: string): SeriesColor => ({ bg: hex, border: hex });
 export const NOTION_COLOR_MAP: Record<string, SeriesColor> = {
-	default: { bg: 'rgba(148, 163, 184, 0.55)', border: 'rgba(148, 163, 184, 1)' },
-	gray: { bg: 'rgba(148, 163, 184, 0.55)', border: 'rgba(148, 163, 184, 1)' },
-	brown: { bg: 'rgba(180, 130, 80, 0.6)', border: 'rgba(180, 130, 80, 1)' },
-	orange: { bg: 'rgba(247, 147, 26, 0.7)', border: 'rgba(247, 147, 26, 1)' },
-	yellow: { bg: 'rgba(234, 179, 8, 0.6)', border: 'rgba(234, 179, 8, 1)' },
-	green: { bg: 'rgba(34, 197, 94, 0.6)', border: 'rgba(34, 197, 94, 1)' },
-	blue: { bg: 'rgba(59, 130, 246, 0.6)', border: 'rgba(59, 130, 246, 1)' },
-	purple: { bg: 'rgba(168, 85, 247, 0.6)', border: 'rgba(168, 85, 247, 1)' },
-	pink: { bg: 'rgba(236, 72, 153, 0.6)', border: 'rgba(236, 72, 153, 1)' },
-	red: { bg: 'rgba(239, 68, 68, 0.6)', border: 'rgba(239, 68, 68, 1)' }
+	default: solid('#58616c'),
+	gray: solid('#8f9397'),
+	brown: solid('#a3661c'),
+	orange: solid('#f2932e'),
+	yellow: solid('#f3d744'),
+	green: solid('#55c889'),
+	blue: solid('#4f85f5'),
+	purple: solid('#8d4ac9'),
+	pink: solid('#fe8acf'),
+	red: solid('#f44f63')
 };
 
 // Fallback palette for series without Notion colors

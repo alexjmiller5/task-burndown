@@ -36,7 +36,10 @@ const task = {
 	lastEditedTime: '2026-07-02T00:00:00.000Z'
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
+});
 
 test('empty cache -> needsFull, no Notion call', async () => {
 	const fetchMock = vi.fn();
@@ -112,8 +115,7 @@ const somaEnv = {
 			priority: 'priority',
 			projectIds: 'project_ids',
 			aiCompleted: 'ai_completed'
-		},
-		tagColors: {}
+		}
 	}),
 	SOMA_HUB_URL: 'https://hub.test',
 	SOMA_HUB_TOKEN: 'test-only'
@@ -145,6 +147,11 @@ const hubReply = (grant: boolean) =>
 						pull_batch: { items: 50, rows: 5000 }
 					})
 				: new Response('{"error":"insufficient scope"}', { status: 403 });
+		if (path === '/v1/catalog/projection')
+			return Response.json({
+				table: 'tasks',
+				properties: [{ column: 'tags', options: [{ v: 'Chore', color: 'purple' }] }]
+			});
 		const { batch } = JSON.parse(String(init.body));
 		return Response.json({ batch: batch.map(() => ({ rows: [], next_cursor: null })) });
 	});
@@ -155,6 +162,7 @@ const somaEvent = (platformEnv: object, search = '') =>
 	}) as never;
 
 test('Soma refreshes incrementally through the hub binding and reports deletions as applied', async () => {
+	vi.stubEnv('DEV', false);
 	const network = vi.fn();
 	vi.stubGlobal('fetch', network);
 	const hub = { fetch: hubReply(true) };
@@ -162,12 +170,14 @@ test('Soma refreshes incrementally through the hub binding and reports deletions
 	expect(body).toMatchObject({ needsFull: false, freshCount: 0, pruned: true });
 	expect(hub.fetch.mock.calls.map((c) => new URL(c[0]).pathname)).toEqual([
 		'/v1/cursor',
-		'/v1/rows/pull'
+		'/v1/rows/pull',
+		'/v1/catalog/projection'
 	]);
 	expect(network).not.toHaveBeenCalled();
 });
 
 test('?full=1 re-reads every Soma row even with a held cursor', async () => {
+	vi.stubEnv('DEV', false);
 	const hub = { fetch: hubReply(true) };
 	const bucket = somaBucket();
 	const event = (search = '') =>
@@ -181,7 +191,9 @@ test('?full=1 re-reads every Soma row even with a held cursor', async () => {
 	expect(hub.fetch).toHaveBeenCalledTimes(1);
 	hub.fetch.mockClear();
 	await POST(event('?full=1'));
-	expect(hub.fetch).toHaveBeenCalledTimes(2);
+	expect(hub.fetch).toHaveBeenCalledTimes(3);
+	const cache = await (await bucket.get(CACHE_KEY))!.json();
+	expect(cache.tagColors).toEqual({ Chore: 'purple', '(Untagged)': 'default' });
 });
 
 test('without the hub_at grant Soma asks the client for the chunked full read', async () => {

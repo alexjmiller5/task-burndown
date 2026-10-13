@@ -14,8 +14,7 @@ const binding = {
 		priority: 'rank',
 		projectIds: 'initiatives',
 		aiCompleted: 'ai'
-	},
-	tagColors: { Alpha: 'blue' }
+	}
 };
 const env = {
 	SOMA_TASKS_CONFIG: JSON.stringify(binding),
@@ -42,6 +41,9 @@ const reply = (...pages: Array<[unknown[], (string | null)?]>) =>
 	);
 const sent = (fetcher: ReturnType<typeof vi.fn>, call: number) =>
 	JSON.parse(fetcher.mock.calls[call][1].body).batch;
+// The hub's column-authorized catalog metadata for the tags column.
+const projection = (options: unknown[]) =>
+	Response.json({ table: 'work', properties: [{ column: 'labels', options }] });
 
 test('unconfigured stays on Notion; partial and malformed Soma bindings fail closed', () => {
 	expect(getSomaConfig({})).toBeNull();
@@ -62,7 +64,8 @@ test('reads every project and a task page in one batch, keeping original dates, 
 				[[row], 'tasks-page2']
 			)
 		)
-		.mockResolvedValueOnce(reply([[{ id: 'p2', label: 'Beta', deleted_at: null }]]));
+		.mockResolvedValueOnce(reply([[{ id: 'p2', label: 'Beta', deleted_at: null }]]))
+		.mockResolvedValueOnce(projection([{ v: 'Alpha', color: 'blue' }]));
 	const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
 	expect(result.tasks).toEqual([
 		{
@@ -80,8 +83,8 @@ test('reads every project and a task page in one batch, keeping original dates, 
 		}
 	]);
 	expect(result.nextCursor).toBe('tasks-page2');
-	expect(result.tagColors.Alpha).toBe('blue');
-	expect(fetcher).toHaveBeenCalledTimes(2);
+	expect(result.tagColors).toEqual({ Alpha: 'blue', '(Untagged)': 'default' });
+	expect(fetcher).toHaveBeenCalledTimes(3);
 	expect(sent(fetcher, 1)).toMatchObject([{ table: 'initiatives', after: 'projects-page2' }]);
 	const [, body] = sent(fetcher, 0);
 	expect(body).toMatchObject({ table: 'work', since: '', limit: 4000 });
@@ -244,12 +247,20 @@ const live = (id: string, values: Record<string, unknown>, hub_at = T1) => ({
 });
 
 /** A hub serving `/v1/cursor` and batched `since` pulls over in-memory tables. */
-function fakeHub(tables: Record<string, Array<Record<string, unknown>>>, { grant = true } = {}) {
+function fakeHub(
+	tables: Record<string, Array<Record<string, unknown>>>,
+	{ grant = true, options = [] as unknown[] | null } = {}
+) {
 	const calls: Array<{ path: string; body: any }> = [];
 	const fetcher = vi.fn(async (url: string, init: RequestInit) => {
 		const path = new URL(url).pathname;
 		const body = JSON.parse(String(init.body));
 		calls.push({ path, body });
+		if (path === '/v1/catalog/projection') {
+			// options null = the token lacks the catalog:read grant.
+			if (!options) return new Response('{"error":"insufficient scope"}', { status: 403 });
+			return projection(options);
+		}
 		if (path === '/v1/cursor') {
 			if (!grant) return new Response('{"error":"insufficient scope"}', { status: 403 });
 			const marks: Record<string, string> = {};
@@ -326,7 +337,11 @@ test('a first incremental refresh pulls both tables in one batch and writes the 
 	const { hub, bucket } = seeded();
 	const result = await refreshSoma(config(), asBucket(bucket), hub.fetcher);
 	expect(result).toMatchObject({ freshCount: 4 });
-	expect(hub.calls.map((c) => c.path)).toEqual(['/v1/cursor', '/v1/rows/pull']);
+	expect(hub.calls.map((c) => c.path)).toEqual([
+		'/v1/cursor',
+		'/v1/rows/pull',
+		'/v1/catalog/projection'
+	]);
 	expect(hub.calls[1].body.batch.map((b: any) => [b.table, b.since])).toEqual([
 		['work', ''],
 		['initiatives', '']
@@ -429,4 +444,75 @@ test('incremental requests refuse redirects like the batched read', async () => 
 	await expect(
 		refreshSoma(config(), asBucket(fakeBucket()), redirected as unknown as typeof fetch)
 	).rejects.toThrow('302');
+});
+
+// --- Tag colors come from the catalog, the same option colors Iris renders ---
+
+test('chunk tag colors are the catalog option colors of the tags column, never the mapping', async () => {
+	const legacy = {
+		...env,
+		SOMA_TASKS_CONFIG: JSON.stringify({ ...binding, tagColors: { Alpha: 'red' } })
+	};
+	const fetcher = vi
+		.fn()
+		.mockResolvedValueOnce(reply([[]], [[row]]))
+		.mockResolvedValueOnce(
+			projection([
+				{ v: 'Alpha', d: 'First', sort: 0, color: 'green' },
+				{ v: 'Beta', sort: 1 }
+			])
+		);
+	const result = await fetchSomaChunk(getSomaConfig(legacy)!, null, fetcher);
+	expect(result.tagColors).toStrictEqual({ Alpha: 'green', '(Untagged)': 'default' });
+	const [url, init] = fetcher.mock.calls[1];
+	expect(url).toBe('https://example.test/v1/catalog/projection');
+	expect(JSON.parse(init.body)).toEqual({ table: 'work', columns: ['labels'] });
+	expect(init).toMatchObject({ method: 'POST', redirect: 'manual' });
+	expect(init.headers.Authorization).toBe('Bearer test-only');
+});
+
+test('without the catalog grant, or on a bad reply, the sync still lands and tags use fallback colors', async () => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	for (const failure of [
+		new Response('{"error":"insufficient scope"}', { status: 403 }),
+		new Response('not json'),
+		Response.json({ properties: [] }),
+		new Error('network down')
+	]) {
+		const fetcher = vi
+			.fn()
+			.mockResolvedValueOnce(reply([[]], [[row]]))
+			.mockImplementationOnce(async () => {
+				if (failure instanceof Error) throw failure;
+				return failure;
+			});
+		const result = await fetchSomaChunk(getSomaConfig(env)!, null, fetcher);
+		expect(result.tasks).toHaveLength(1);
+		expect(result.tagColors).toEqual({ '(Untagged)': 'default' });
+	}
+	expect(warn).toHaveBeenCalled();
+	warn.mockRestore();
+});
+
+test('an incremental refresh writes the catalog colors with the cache; a quiet one never asks', async () => {
+	const hub = fakeHub(
+		{ initiatives: [], work: [live('t1', {})] },
+		{ options: [{ v: 'Alpha', color: 'purple' }] }
+	);
+	const bucket = fakeBucket();
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	expect(bucket.cache().tagColors).toEqual({ Alpha: 'purple', '(Untagged)': 'default' });
+	hub.calls.length = 0;
+	await refreshSoma(config(), asBucket(bucket), hub.fetcher);
+	expect(hub.calls.map((c) => c.path)).toEqual(['/v1/cursor']);
+});
+
+test('an incremental refresh without the catalog grant still writes the cache, with fallback colors', async () => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	const hub = fakeHub({ initiatives: [], work: [live('t1', {})] }, { options: null });
+	const bucket = fakeBucket();
+	expect(await refreshSoma(config(), asBucket(bucket), hub.fetcher)).toEqual({ freshCount: 1 });
+	expect(bucket.cache().tasks).toHaveLength(1);
+	expect(bucket.cache().tagColors).toEqual({ '(Untagged)': 'default' });
+	warn.mockRestore();
 });

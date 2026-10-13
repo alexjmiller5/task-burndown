@@ -22,7 +22,6 @@ type Binding = {
 	table: string;
 	projects: { table: string; title: string };
 	columns: Record<Field, string>;
-	tagColors: Record<string, string>;
 };
 type Config = { binding: Binding; url: string; token: string };
 const fields: Field[] = [
@@ -52,13 +51,6 @@ export function getSomaConfig(env: SomaEnv): Config | null {
 		fields.some((f) => !identifier(binding.columns?.[f]))
 	)
 		throw new Error('Invalid SOMA_TASKS_CONFIG mapping');
-	if (
-		!binding.tagColors ||
-		typeof binding.tagColors !== 'object' ||
-		Array.isArray(binding.tagColors) ||
-		Object.values(binding.tagColors).some((c) => typeof c !== 'string')
-	)
-		throw new Error('SOMA_TASKS_CONFIG requires tagColors');
 	const url = env.SOMA_HUB_URL ?? local?.SOMA_HUB_URL;
 	const token = env.SOMA_HUB_TOKEN ?? local?.SOMA_HUB_TOKEN;
 	if (!url || !token) throw new Error('Soma URL and dedicated read credential are required');
@@ -77,10 +69,12 @@ export function getSomaConfig(env: SomaEnv): Config | null {
 /**
  * A Worker cannot fetch a sibling workers.dev Worker (Cloudflare error 1042):
  * reach the hub through its service binding when there is one. Call it as a
- * method; a detached binding fetch throws Illegal invocation.
+ * method; a detached binding fetch throws Illegal invocation. The dev server's
+ * platform proxy declares the binding with no hub Worker behind it, so dev
+ * uses the network.
  */
 export function hubFetch(env: SomaEnv): typeof fetch {
-	const hub = env.SOMA_HUB;
+	const hub = import.meta.env.DEV ? undefined : env.SOMA_HUB;
 	return hub ? (((input, init) => hub.fetch(input, init)) as typeof fetch) : fetch;
 }
 
@@ -182,7 +176,7 @@ export async function fetchSomaChunk(
 		else tasks.push(toTask(row, binding, projects));
 	}
 	return {
-		...summarize(tasks, binding),
+		...summarize(tasks, await fetchTagColors(config, fetcher)),
 		deletedIds,
 		nextCursor: result.next_cursor,
 		sourceKey: await sourceKeyOf(config)
@@ -213,14 +207,48 @@ function toTask(row: Row, binding: Binding, projects: Map<string, string>): Task
 const projectName = (id: string | undefined, projects: Map<string, string>) =>
 	id === undefined ? '(No Project)' : (projects.get(id) ?? '(Unavailable Project)');
 
-function summarize(tasks: Task[], binding: Binding): ParsedData {
+function summarize(tasks: Task[], tagColors: Record<string, string>): ParsedData {
 	return {
 		tasks,
 		allTags: [...new Set(['(Untagged)', ...tasks.flatMap((t) => t.tags)])].sort(),
 		allPriorities: PRIORITY_ORDER.filter((p) => tasks.some((t) => t.priority === p)),
 		allProjects: [...new Set(tasks.map((t) => t.projectName))].sort(),
-		tagColors: { ...binding.tagColors, '(Untagged)': 'default' }
+		tagColors: { ...tagColors, '(Untagged)': 'default' }
 	};
+}
+
+/**
+ * Tag colors are the catalog's own option colors for the tags column (palette
+ * names, as Iris renders them), read through the hub's column-authorized
+ * metadata route: it needs `catalog:read:<table>:<tags column>` beside the
+ * column read. Without it, or on any failure, the sync still lands and tags
+ * take the chart's fallback colors.
+ */
+async function fetchTagColors(config: Config, fetcher: typeof fetch) {
+	const { table, columns } = config.binding;
+	try {
+		const response = await fetcher(`${config.url}/v1/catalog/projection`, {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ table, columns: [columns.tags] }),
+			signal: AbortSignal.timeout(20000),
+			redirect: 'manual'
+		});
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		const body = (await response.json()) as {
+			properties: Array<{ options?: Array<{ v: unknown; color?: unknown }> }>;
+		};
+		return Object.fromEntries(
+			(body.properties[0].options ?? []).flatMap(({ v, color }) =>
+				typeof v === 'string' && typeof color === 'string' ? [[v, color]] : []
+			)
+		) as Record<string, string>;
+	} catch (error) {
+		console.warn(
+			`Soma tag colors unavailable (${(error as Error).message}); using fallback colors`
+		);
+		return {};
+	}
 }
 
 /** Identifies the hub and mapping a cache was built from. */
@@ -293,9 +321,12 @@ export async function refreshSoma(
 	for (const id of projectChanges.deleted) projects.delete(id);
 	for (const row of projectChanges.rows) projects.set(row.id, text(row[binding.projects.title]));
 
-	const base = taskChanges.full
-		? { tasks: [], lastFullRefreshAt: new Date().toISOString() }
-		: await readCacheObject(bucket);
+	const [base, tagColors] = await Promise.all([
+		taskChanges.full
+			? { tasks: [], lastFullRefreshAt: new Date().toISOString() }
+			: readCacheObject(bucket),
+		fetchTagColors(config, fetcher)
+	]);
 	const byId = new Map(base.tasks.map((t) => [t.id, t]));
 	const refs = new Map(taskChanges.full ? [] : Object.entries(held!.refs));
 	for (const id of taskChanges.deleted) {
@@ -312,7 +343,7 @@ export async function refreshSoma(
 	for (const t of byId.values()) t.projectName = projectName(refs.get(t.id), projects);
 
 	const data: TaskCache = {
-		...summarize([...byId.values()], binding),
+		...summarize([...byId.values()], tagColors),
 		lastFullRefreshAt: base.lastFullRefreshAt
 	};
 	const written = await bucket.put(CACHE_KEY, JSON.stringify(data), {

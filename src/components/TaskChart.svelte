@@ -70,6 +70,21 @@
 		}
 	);
 
+	// The gold average line crosses bright yellow series (Shopping, Medium); a
+	// halo in the chart surface color keeps it legible over any fill.
+	const avgHalo = {
+		id: 'avgHalo',
+		beforeDatasetDraw(c: any, { index }: { index: number }) {
+			if (index !== 0) return;
+			c.ctx.save();
+			c.ctx.shadowColor = getComputedStyle(canvas).getPropertyValue('--color-surface').trim();
+			c.ctx.shadowBlur = 6;
+		},
+		afterDatasetDraw(c: any, { index }: { index: number }) {
+			if (index === 0) c.ctx.restore();
+		}
+	};
+
 	let canvas: HTMLCanvasElement;
 	let chart: any = null;
 	let ChartJS: any = null;
@@ -295,7 +310,7 @@
 		averages = visibleAvg();
 		chart = new ChartJS(canvas, {
 			...buildConfig(dailyCounts, categories, dateRange),
-			plugins: [markerPlugin]
+			plugins: [markerPlugin, avgHalo]
 		});
 		// Restore remembered legend toggles so they survive the rebuild.
 		if (hiddenLegendLabels.size > 0) {
