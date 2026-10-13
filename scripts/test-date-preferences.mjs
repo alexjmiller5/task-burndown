@@ -88,9 +88,11 @@ try {
 	};
 	// A closed list can linger in the DOM until its exit animation ends: only the open one counts.
 	const openList = `[data-slot=select-content][data-state=open]`;
-	const listClosed = `!document.querySelector('${openList}')`;
-	const choose = async (title, option) => {
-		// A list still open or closing swallows the next trigger click.
+	// A list still open or closing swallows the next click, and so does the body until the
+	// select hands pointer events back: wait for both.
+	const listClosed = `!document.querySelector('[data-slot=select-content]')&&getComputedStyle(document.body).pointerEvents!=='none'`;
+	// A multiple select stays open after a pick; the caller closes it.
+	const choose = async (title, option, multiple = false) => {
 		await waitFor(listClosed, 'A select list stayed open');
 		await click(`document.querySelector('button[title="${title}"]')`);
 		await waitFor(
@@ -102,6 +104,7 @@ try {
 			`[...document.querySelectorAll('${openList} [role=option]')].find(e=>e.textContent.trim()===${JSON.stringify(option)})`
 		);
 		await pause();
+		if (!multiple) await waitFor(listClosed, 'A select list never finished closing');
 	};
 	// Tall enough that the 24-entry day start list opens without scroll buttons.
 	await send('Emulation.setDeviceMetricsOverride', {
@@ -175,7 +178,7 @@ try {
 	await reload();
 	console.log('PASS This device default, discard-once, shared day start through reload');
 	const projectLens = 'Which tasks count: with a project, without, or both';
-	await choose(projectLens, 'Without project');
+	await choose(projectLens, 'Without project', true);
 	await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
 	await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
 	await pause();
@@ -188,7 +191,7 @@ try {
 		await evaluate(`document.querySelector('button[title="${projectLens}"]').textContent.trim()`),
 		'With project'
 	);
-	await choose(projectLens, 'With project');
+	await choose(projectLens, 'With project', true);
 	await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
 	await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
 	await pause();
@@ -269,6 +272,40 @@ try {
 		await pause();
 		assert.deepEqual(await labels(), expected, `${handle} ${key} stops a day short of the other`);
 	}
+	// Clicking a selected date opens the browser's calendar; a picked day moves that bound.
+	await evaluate(
+		`window.__pickers=[];HTMLInputElement.prototype.showPicker=function(){window.__pickers.push(this.getAttribute('aria-label'))}`
+	);
+	const pick = (label, value) =>
+		evaluate(
+			`(()=>{const i=document.querySelector('[aria-label="${label}"]');i.value='${value}';i.dispatchEvent(new Event('change',{bubbles:true}))})()`
+		);
+	await choose('Date range', '90D');
+	await click(`document.querySelector('[aria-label="Pick start date"]')`);
+	assert.deepEqual(
+		await evaluate('window.__pickers'),
+		['Pick start date'],
+		'Date click opens a calendar'
+	);
+	await pick('Pick start date', '2025-03-15');
+	await pause();
+	assert.equal((await labels())[0], 'Mar 15, 2025', 'A picked start date moves the start');
+	assert.equal(
+		await evaluate(`document.querySelector('button[title="Date range"]').textContent.trim()`),
+		'Custom'
+	);
+	await pick('Pick end date', '2025-01-01');
+	await pause();
+	assert.deepEqual(await labels(), ['Mar 15, 2025', 'Mar 16, 2025'], 'An early end clamps');
+	// Clamping onto the current end changes no prop, so the input itself must be reset.
+	await pick('Pick end date', '2025-01-01');
+	await pause();
+	assert.equal(
+		await evaluate(`document.querySelector('[aria-label="Pick end date"]').value`),
+		'2025-03-16',
+		'The calendar reopens on the clamped day'
+	);
+	console.log('PASS date click opens a calendar, picks move a bound, out-of-range picks clamp');
 	await choose('Date range', '30D');
 	const beforeDrag = await selected();
 	// The filled span sits just before the start handle; dragging it moves the whole window.
