@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
 	addDays,
+	addMonths,
 	DEVICE_TIMEZONE,
 	diffDays,
 	getCurrentDateStr,
@@ -54,6 +55,13 @@ test('addDays — across spring DST (US, March 8 2026)', () => {
 
 test('addDays — across fall DST (US, Nov 1 2026)', () => {
 	expect(addDays('2026-11-01', 1)).toEqual('2026-11-02');
+});
+
+test('addMonths — same day two months on, clamped to the target month end', () => {
+	expect(addMonths('2026-10-13', 2)).toEqual('2026-12-13');
+	expect(addMonths('2026-11-30', 2)).toEqual('2027-01-30');
+	expect(addMonths('2026-12-31', 2)).toEqual('2027-02-28');
+	expect(addMonths('2027-12-31', 2)).toEqual('2028-02-29');
 });
 
 test('addDays — month boundary', () => {

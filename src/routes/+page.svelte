@@ -26,6 +26,7 @@
 	import {
 		DEVICE_TIMEZONE,
 		TIMEZONES,
+		addMonths,
 		getCurrentDateStr,
 		type DayZone
 	} from '$lib/data/timezone.js';
@@ -160,14 +161,8 @@
 
 	let prefsLoaded = $state(false);
 
-	let SLIDER_MAX = $derived.by(() => {
-		// today + 14 days — gives a small future buffer without stretching the
-		// slider so wide that short ranges (7D/30D) collapse to invisible slivers.
-		const today = getCurrentDateStr(zone);
-		const [y, m, d] = today.split('-').map(Number);
-		const dt = new Date(Date.UTC(y, m - 1, d + 14));
-		return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
-	});
+	// today + 2 months: room to look ahead at scheduled due dates.
+	let SLIDER_MAX = $derived(addMonths(getCurrentDateStr(zone), 2));
 
 	let baseTasks = $derived(applyBaseFilters(allTasks, includeCanceled));
 

@@ -85,6 +85,14 @@ export function addDays(dateStr: string, days: number): string {
 	return `${yy}-${mm}-${dd}`;
 }
 
+// Same day `months` later, or the target month's last day when it is shorter (Dec 31 + 2 = Feb 28).
+export function addMonths(dateStr: string, months: number): string {
+	const [y, m, d] = dateStr.split('-').map(Number);
+	// Day 0 of the month after the target is the target's last day.
+	const lastDay = new Date(Date.UTC(y, m + months, 0)).getUTCDate();
+	return new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))).toISOString().slice(0, 10);
+}
+
 export function getCurrentDateStr(zone: DayZone, now: Date = new Date()): string {
 	return dateIn(now, zone);
 }

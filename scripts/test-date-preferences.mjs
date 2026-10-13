@@ -272,40 +272,56 @@ try {
 		await pause();
 		assert.deepEqual(await labels(), expected, `${handle} ${key} stops a day short of the other`);
 	}
-	// Clicking a selected date opens the browser's calendar; a picked day moves that bound.
-	await evaluate(
-		`window.__pickers=[];HTMLInputElement.prototype.showPicker=function(){window.__pickers.push(this.getAttribute('aria-label'))}`
+	// Clicking a selected date opens a calendar limited to the dates that handle may take.
+	const cell = (date) =>
+		`document.querySelector('[data-slot=popover-content] td[data-value="${date}"]')`;
+	const calendarClosed = `!document.querySelector('[data-slot=popover-content]')`;
+	await click(`document.querySelector('[aria-label="Pick end date"]')`);
+	await waitFor(`!!${cell('2025-04-02')}`, 'The end calendar did not open');
+	assert.equal(await evaluate(`${cell('2025-04-02')}.hasAttribute('data-selected')`), true);
+	assert.equal(
+		await evaluate(`${cell('2025-04-01')}.hasAttribute('data-disabled')`),
+		true,
+		'The end calendar stops a day after the start'
 	);
-	const pick = (label, value) =>
-		evaluate(
-			`(()=>{const i=document.querySelector('[aria-label="${label}"]');i.value='${value}';i.dispatchEvent(new Event('change',{bubbles:true}))})()`
-		);
+	await click(`${cell('2025-04-20')}.querySelector('[data-bits-day]')`);
+	await waitFor(calendarClosed, 'Picking a day closes the calendar');
+	assert.deepEqual(await labels(), ['Apr 1, 2025', 'Apr 20, 2025'], 'A picked end moves the end');
 	await choose('Date range', '90D');
 	await click(`document.querySelector('[aria-label="Pick start date"]')`);
-	assert.deepEqual(
-		await evaluate('window.__pickers'),
-		['Pick start date'],
-		'Date click opens a calendar'
+	const free = `[...document.querySelectorAll('[data-slot=popover-content] td[data-value]:not([data-disabled]):not([data-selected]):not([data-outside-month])')][0]`;
+	await waitFor(`!!${free}`, 'The start calendar did not open');
+	const picked = await evaluate(`${free}.getAttribute('data-value')`);
+	await click(`${free}.querySelector('[data-bits-day]')`);
+	await waitFor(calendarClosed, 'Picking a day closes the calendar');
+	assert.equal(
+		(await labels())[0],
+		new Date(picked + 'T00:00:00').toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		}),
+		'A picked start moves the start'
 	);
-	await pick('Pick start date', '2025-03-15');
-	await pause();
-	assert.equal((await labels())[0], 'Mar 15, 2025', 'A picked start date moves the start');
 	assert.equal(
 		await evaluate(`document.querySelector('button[title="Date range"]').textContent.trim()`),
 		'Custom'
 	);
-	await pick('Pick end date', '2025-01-01');
-	await pause();
-	assert.deepEqual(await labels(), ['Mar 15, 2025', 'Mar 16, 2025'], 'An early end clamps');
-	// Clamping onto the current end changes no prop, so the input itself must be reset.
-	await pick('Pick end date', '2025-01-01');
+	// The track looks two months past today (end of the target month when it is shorter).
+	await click(`document.querySelector('[aria-label="End date"]')`);
+	await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'End', code: 'End' });
+	await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'End', code: 'End' });
 	await pause();
 	assert.equal(
-		await evaluate(`document.querySelector('[aria-label="Pick end date"]').value`),
-		'2025-03-16',
-		'The calendar reopens on the clamped day'
+		(await labels())[1],
+		await evaluate(
+			`(()=>{const n=new Date(),last=new Date(n.getFullYear(),n.getMonth()+3,0).getDate();return new Date(n.getFullYear(),n.getMonth()+2,Math.min(n.getDate(),last)).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})})()`
+		),
+		'The slider ends two months after today'
 	);
-	console.log('PASS date click opens a calendar, picks move a bound, out-of-range picks clamp');
+	console.log(
+		'PASS date click opens a bounded calendar, picks move a bound, slider ends 2 months out'
+	);
 	await choose('Date range', '30D');
 	const beforeDrag = await selected();
 	// The filled span sits just before the start handle; dragging it moves the whole window.
