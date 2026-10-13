@@ -163,3 +163,15 @@ test('diffDays counts calendar days between date strings', () => {
 	// across a DST transition (US spring forward 2026-03-08)
 	expect(diffDays('2026-03-07', '2026-03-09')).toBe(2);
 });
+
+test('toLocalDateStr - a floating local time keeps its own date in any zone or host zone', () => {
+	expect(toLocalDateStr('2026-05-04T23:30', 'Asia/Tokyo')).toEqual('2026-05-04');
+	expect(toLocalDateStr('2026-05-04T00:30', 'Pacific/Honolulu')).toEqual('2026-05-04');
+});
+
+test('toLocalDateStr - a floating local time before the day start belongs to the previous day', () => {
+	const zone = { tz: 'Asia/Tokyo', dayStart: 180 };
+	expect(toLocalDateStr('2026-05-04T02:59', zone)).toEqual('2026-05-03');
+	expect(toLocalDateStr('2026-05-04T03:00', zone)).toEqual('2026-05-04');
+	expect(toLocalDateStr('2026-03-01T01:00', zone)).toEqual('2026-02-28');
+});

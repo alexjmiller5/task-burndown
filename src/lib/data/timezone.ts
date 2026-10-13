@@ -24,6 +24,7 @@ export const DEVICE_TIMEZONE = 'device';
 export type DayZone = string | { tz: string; dayStart: number };
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const FLOATING_RE = /^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})$/;
 
 // Intl.DateTimeFormat construction is expensive; cache one formatter per tz.
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -54,9 +55,17 @@ function dateIn(instant: Date, zone: DayZone): string {
 	return Number(p.hour) * 60 + Number(p.minute) < dayStart ? addDays(date, -1) : date;
 }
 
+/**
+ * The day a stored date falls on: dates as-is, instants in `zone`, and floating
+ * local times (`YYYY-MM-DDTHH:MM`, no zone) by their own wall clock.
+ */
 export function toLocalDateStr(value: string, zone: DayZone): string {
 	if (DATE_ONLY_RE.test(value)) return value;
-	return dateIn(new Date(value), zone);
+	const floating = FLOATING_RE.exec(value);
+	if (!floating) return dateIn(new Date(value), zone);
+	const dayStart = typeof zone === 'string' ? 0 : zone.dayStart;
+	const date = value.slice(0, 10);
+	return Number(floating[1]) * 60 + Number(floating[2]) < dayStart ? addDays(date, -1) : date;
 }
 
 /** Calendar days from dateStr a to b (UTC arithmetic, DST-safe). */
