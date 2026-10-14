@@ -276,6 +276,13 @@ try {
 	const cell = (date) =>
 		`document.querySelector('[data-slot=popover-content] td[data-value="${date}"]')`;
 	const calendarClosed = `!document.querySelector('[data-slot=popover-content]')`;
+	const color = (selector) =>
+		evaluate(`getComputedStyle(document.querySelector('${selector}')).color`);
+	assert.equal(
+		await color('[aria-label="Pick end date"]'),
+		await color('button[title="Date range"]'),
+		'Date chips use the control buttons text color'
+	);
 	await click(`document.querySelector('[aria-label="Pick end date"]')`);
 	await waitFor(`!!${cell('2025-04-02')}`, 'The end calendar did not open');
 	assert.equal(await evaluate(`${cell('2025-04-02')}.hasAttribute('data-selected')`), true);

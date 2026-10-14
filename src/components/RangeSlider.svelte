@@ -251,11 +251,11 @@
 		{#each HANDLES as handle (handle)}
 			<Popover.Root bind:open={pickerOpen[handle]}>
 				<Popover.Trigger
-					class="inline-flex items-center gap-1.5 rounded-control border border-border-default px-2 py-1 text-foreground uppercase outline-none hover:border-border-strong focus-visible:ring-1 focus-visible:ring-bitcoin pointer-coarse:min-h-9"
+					class="inline-flex items-center gap-1.5 rounded-control border border-border-default px-2 py-1 uppercase outline-none hover:border-border-strong focus-visible:ring-1 focus-visible:ring-bitcoin pointer-coarse:min-h-9"
 					aria-label="Pick {handle} date"
 				>
 					<svg
-						class="size-3.5 shrink-0 opacity-70"
+						class="size-3.5 shrink-0"
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
