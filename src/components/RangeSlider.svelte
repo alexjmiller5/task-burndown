@@ -243,7 +243,7 @@
 </script>
 
 <div class="space-y-2">
-	<!-- Selected dates: click one to pick it from a calendar -->
+	<!-- Selected dates as chips: click one to pick it from a calendar -->
 	<div
 		class="flex justify-between text-[10px] font-[var(--font-mono)] uppercase tracking-wider transition-colors duration-150"
 		style="color: {dragging ? 'var(--color-bitcoin)' : 'var(--color-muted)'};"
@@ -251,9 +251,24 @@
 		{#each HANDLES as handle (handle)}
 			<Popover.Root bind:open={pickerOpen[handle]}>
 				<Popover.Trigger
-					class="rounded py-1 uppercase underline decoration-dotted underline-offset-2 outline-none hover:text-bitcoin focus-visible:ring-1 focus-visible:ring-bitcoin"
+					class="inline-flex items-center gap-1.5 rounded-control border border-border-default px-2 py-1 text-foreground uppercase outline-none hover:border-border-strong focus-visible:ring-1 focus-visible:ring-bitcoin pointer-coarse:min-h-9"
 					aria-label="Pick {handle} date"
 				>
+					<svg
+						class="size-3.5 shrink-0 opacity-70"
+						xmlns="http://www.w3.org/2000/svg"
+						fill="none"
+						viewBox="0 0 24 24"
+						stroke-width="1.5"
+						stroke="currentColor"
+						aria-hidden="true"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"
+						/>
+					</svg>
 					{formatLabel(handle === 'start' ? start : end)}
 				</Popover.Trigger>
 				<Popover.Content class="w-auto p-0" align={handle}>
