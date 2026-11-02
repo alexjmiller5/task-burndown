@@ -14,6 +14,7 @@
 	import {
 		avgDueToCompletion,
 		calculateCompletions,
+		calculateCreations,
 		cancelRate,
 		sampleDailyCounts,
 		tasksInWindow,
@@ -251,6 +252,7 @@
 		}
 	});
 
+	let creations = $derived(calculateCreations(filteredTasks, zone, flowBucket, dateStart, dateEnd));
 	let completions = $derived(
 		calculateCompletions(filteredTasks, zone, flowBucket, dateStart, dateEnd)
 	);
@@ -828,6 +830,7 @@
 			>
 				{#if chartMode === 'rate'}
 					<RateChart
+						{creations}
 						{completions}
 						bucket={flowBucket}
 						dateRange={{ start: dateStart, end: dateEnd }}
@@ -836,6 +839,7 @@
 					/>
 				{:else}
 					<TaskChart
+						{creations}
 						dailyCounts={displayCounts}
 						{categories}
 						{groupBy}

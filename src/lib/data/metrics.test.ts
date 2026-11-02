@@ -236,3 +236,25 @@ test('tasksResolvedIn keeps only tasks completed inside the window', () => {
 	const ids = tasksResolvedIn(tasks, 'UTC', '2026-02-01', '2026-02-28').map((t) => t.id);
 	expect(ids).toEqual(['inside', 'edge']);
 });
+
+test('creation counts use entry time, not due dates or completion, with the selected day boundary', async () => {
+	const { calculateCreations } = await import('./metrics.ts');
+	const tasks = [
+		makeTask({ created: '2026-07-02T05:00:00Z', dueDate: '2026-09-01' }),
+		makeTask({ created: '2026-07-02T14:00:00Z', dueDate: '2026-04-01', completed: '2026-07-02' }),
+		makeTask({ created: '2026-07-03T14:00:00Z' })
+	];
+	expect(
+		calculateCreations(
+			tasks,
+			{ tz: 'America/New_York', dayStart: 180 },
+			'day',
+			'2026-07-01',
+			'2026-07-02'
+		)
+	).toEqual({ '2026-07-01': 1, '2026-07-02': 1 });
+	expect(calculateCreations(tasks, 'UTC', 'month', '2026-07-02', '2026-07-02')).toEqual({
+		'2026-07': 2
+	});
+	expect(calculateCreations([], 'UTC', 'week', '2026-07-01', '2026-07-31')).toEqual({});
+});

@@ -7,6 +7,7 @@
 
 	interface Props {
 		completions: CompletionRow[];
+		creations?: Record<string, number>;
 		bucket: FlowBucket;
 		dateRange: { start: string; end: string };
 		/** Show same-day churn as hatched extensions on both directions. */
@@ -14,7 +15,14 @@
 		markers?: ChartMarker[];
 	}
 
-	let { completions, bucket, dateRange, showSameDay = false, markers = [] }: Props = $props();
+	let {
+		completions,
+		creations = {},
+		bucket,
+		dateRange,
+		showSameDay = false,
+		markers = []
+	}: Props = $props();
 
 	// Labels must clear the tallest upward bar: added plus its same-day
 	// half-height base.
@@ -192,7 +200,7 @@
 								if (!items[0]) return '';
 								const r = completions[items[0].dataIndex];
 								const net = r.added - r.backlog;
-								return `Net: ${net > 0 ? '+' : ''}${net}`;
+								return [`Net: ${net > 0 ? '+' : ''}${net}`, `Created: ${creations[r.label] ?? 0}`];
 							}
 						}
 					}
@@ -256,6 +264,7 @@
 	$effect(() => {
 		// Read all reactive inputs to subscribe to changes
 		const _c = completions;
+		const _cr = creations;
 		const _b = bucket;
 		const _m = isMobile;
 		const _s = showSameDay;

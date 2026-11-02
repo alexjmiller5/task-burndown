@@ -25,6 +25,7 @@
 		markers?: ChartMarker[];
 		/** Per-bucket completion counts (backlog vs same-day) for the overlay + tooltip. */
 		completions?: CompletionRow[];
+		creations?: Record<string, number>;
 		/** Draw the completion bars; the tooltip footer shows completions regardless. */
 		showCompleted?: boolean;
 	}
@@ -40,6 +41,7 @@
 		avgSource = [],
 		markers = [],
 		completions = [],
+		creations = {},
 		showCompleted = false
 	}: Props = $props();
 
@@ -270,7 +272,9 @@
 										item.dataset.type === 'line' ? sum : sum + (item.raw || 0),
 									0
 								);
-								const lines = [`Total: ${total}`];
+								const date = items[0] ? visible[items[0].dataIndex]?.date : undefined;
+								const created = date ? (creations[bucketLabel(date, bucket)] ?? 0) : 0;
+								const lines = [`Total: ${total}`, `Created: ${created}`];
 								const c = items[0] ? comp[items[0].dataIndex] : undefined;
 								if (c && (c.added > 0 || c.backlog + c.sameDay > 0)) {
 									lines.push(`Added: ${c.added}`);
@@ -367,6 +371,7 @@
 		const _mk = markers;
 		const _m = isMobile;
 		const _cp = completions;
+		const _cr = creations;
 		const _sc = showCompleted;
 		// Rebuild on any change
 		rebuildChart();

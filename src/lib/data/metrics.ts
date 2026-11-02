@@ -148,3 +148,21 @@ export function cancelRate(tasks: Task[]): number | null {
 	const resolved = canceled + completed;
 	return resolved === 0 ? null : (100 * canceled) / resolved;
 }
+
+/** Tasks entered in each bucket, independent of due date and same-day completion. */
+export function calculateCreations(
+	tasks: Task[],
+	tz: DayZone,
+	bucket: FlowBucket,
+	start: string,
+	end: string
+): Record<string, number> {
+	const counts: Record<string, number> = {};
+	for (const task of tasks) {
+		const date = toLocalDateStr(task.created, tz);
+		if (date < start || date > end) continue;
+		const label = bucketLabel(date, bucket);
+		counts[label] = (counts[label] ?? 0) + 1;
+	}
+	return counts;
+}
