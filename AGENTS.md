@@ -101,7 +101,7 @@ UI controls are inlined in `src/routes/+page.svelte` rather than extracted into 
 - `just deploy` — `bun run test && bun run build && bunx wrangler deploy`.
 - `just logs` — `bunx wrangler tail`.
 - `just sync-secrets` — push Worker secrets from `.env.tpl` via `scripts/sync-secrets.sh`.
-- GHA: `.github/workflows/deploy.yml` triggers on push to `main`; uses 1P service account for both Cloudflare credentials and Worker secrets.
+- GHA: `.github/workflows/deploy.yml` requires static checks, tests and build before deployment and triggers on push to `main`; uses 1P service account for both Cloudflare credentials and Worker secrets.
 - One-time `bunx wrangler login` (or `CLOUDFLARE_API_TOKEN` env var) needed before the first local deploy.
 
 ## Access & PWA
