@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
 	assignLane,
+	createMarkerPlugin,
 	laneStripHeight,
 	MARKER_LANE_HEIGHT,
 	parseMarkers,
@@ -118,5 +119,56 @@ describe('parseMarkers', () => {
 		['an over-long label', [{ date: '2026-03-01', label: 'x'.repeat(81), direction: 'up' }]]
 	])('rejects %s', (_, input) => {
 		expect(() => parseMarkers(input)).toThrow();
+	});
+});
+
+describe('marker headroom redraw lifecycle', () => {
+	function fixture() {
+		let redraw: FrameRequestCallback | undefined;
+		vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+			redraw = callback;
+			return 1;
+		});
+		const ctx = new Proxy(
+			{ measureText: () => ({ width: 40 }) },
+			{ get: (target, key) => Reflect.get(target, key) ?? (() => {}) }
+		);
+		const chart = {
+			canvas: {} as object | null,
+			ctx: ctx as object | null,
+			chartArea: { top: 0, bottom: 300, left: 0, right: 500 },
+			scales: { x: { type: 'time', getPixelForValue: () => 100 }, y: { min: 0 } },
+			options: { scales: { y: {} } },
+			update: vi.fn()
+		};
+		const plugin = createMarkerPlugin(
+			() => [{ date: '2026-01-01', label: 'Example event', direction: 'up' }],
+			() => 100
+		);
+		plugin.afterDatasetsDraw(chart);
+		expect(redraw).toBeTypeOf('function');
+		return { chart, redraw: () => redraw!(0) };
+	}
+
+	it('does not redraw a chart destroyed before its scheduled marker refit', () => {
+		try {
+			const { chart, redraw } = fixture();
+			chart.canvas = null;
+			chart.ctx = null;
+			redraw();
+			expect(chart.update).not.toHaveBeenCalled();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('still refits a live chart on the next animation frame', () => {
+		try {
+			const { chart, redraw } = fixture();
+			redraw();
+			expect(chart.update).toHaveBeenCalledExactlyOnceWith('none');
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

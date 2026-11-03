@@ -216,7 +216,10 @@ export function createMarkerPlugin(getMarkers: () => ChartMarker[], getDataMax: 
 					laneHeadroom = target;
 					laneFits++;
 					c.options.scales.y.max = target;
-					requestAnimationFrame(() => c.update('none'));
+					requestAnimationFrame(() => {
+						// A view or theme change can destroy this chart before the refit.
+						if (c.canvas && c.ctx) c.update('none');
+					});
 				}
 			}
 		}
