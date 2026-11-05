@@ -1,3 +1,4 @@
+import config from '../../wrangler.jsonc?raw';
 import workflow from '../../.github/workflows/deploy.yml?raw';
 import { expect, test } from 'vitest';
 
@@ -13,4 +14,12 @@ test('deployment requires a successful static check before build and upload', ()
 	expect(workflow).not.toMatch(/continue-on-error\s*:\s*(?!false\b)\S+/);
 	expect(workflow).not.toMatch(/if\s*:.*(?:always|failure)\s*\(/);
 	expect(commands[check]).toBe('bun run check');
+});
+
+test('public hub reads have the Workers routing flag and no cross-project binding', () => {
+	const worker = JSON.parse(config.replace(/^\s*\/\/.*$/gm, ''));
+	expect(worker.compatibility_flags).toContain('global_fetch_strictly_public');
+	expect(worker.services ?? []).not.toEqual(
+		expect.arrayContaining([expect.objectContaining({ binding: 'SOMA_HUB' })])
+	);
 });

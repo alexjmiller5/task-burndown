@@ -2,7 +2,7 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "task-burndown",
 	"compatibility_date": "2026-07-06",
-	"compatibility_flags": ["nodejs_als"],
+	"compatibility_flags": ["nodejs_als", "global_fetch_strictly_public"],
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"assets": {
 		"binding": "ASSETS",
@@ -10,9 +10,5 @@
 	},
 	"workers_dev": true,
 	"preview_urls": true,
-	"r2_buckets": [{ "binding": "CACHE", "bucket_name": "task-burndown-cache" }],
-	// Workers cannot fetch a sibling workers.dev Worker over the network (CF error
-	// 1042), so the Soma hub's HTTP API is reached through a service binding; the
-	// request shape and the SOMA_HUB_TOKEN auth are unchanged.
-	"services": [{ "binding": "SOMA_HUB", "service": "soma" }]
+	"r2_buckets": [{ "binding": "CACHE", "bucket_name": "task-burndown-cache" }]
 }

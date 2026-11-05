@@ -161,24 +161,26 @@ const somaEvent = (platformEnv: object, search = '') =>
 		platform: { env: { CACHE: somaBucket(), ...somaEnv, ...platformEnv } }
 	}) as never;
 
-test('Soma refreshes incrementally through the hub binding and reports deletions as applied', async () => {
+test('Soma refreshes incrementally through the configured public URL and reports deletions as applied', async () => {
 	vi.stubEnv('DEV', false);
-	const network = vi.fn();
+	const network = hubReply(true);
 	vi.stubGlobal('fetch', network);
-	const hub = { fetch: hubReply(true) };
+	const hub = { fetch: vi.fn() };
 	const body = await (await POST(somaEvent({ SOMA_HUB: hub }))).json();
 	expect(body).toMatchObject({ needsFull: false, freshCount: 0, pruned: true });
-	expect(hub.fetch.mock.calls.map((c) => new URL(c[0]).pathname)).toEqual([
+	expect(network.mock.calls.map((c) => new URL(c[0]).pathname)).toEqual([
 		'/v1/cursor',
 		'/v1/rows/pull',
 		'/v1/catalog/projection'
 	]);
-	expect(network).not.toHaveBeenCalled();
+	expect(hub.fetch).not.toHaveBeenCalled();
+	expect(network.mock.calls.every(([url]) => url.startsWith('https://hub.test/'))).toBe(true);
 });
 
 test('?full=1 re-reads every Soma row even with a held cursor', async () => {
 	vi.stubEnv('DEV', false);
 	const hub = { fetch: hubReply(true) };
+	vi.stubGlobal('fetch', hub.fetch);
 	const bucket = somaBucket();
 	const event = (search = '') =>
 		({

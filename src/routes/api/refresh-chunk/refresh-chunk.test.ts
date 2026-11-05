@@ -37,22 +37,26 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
-test('Soma reads go through the hub service binding when the Worker has one', async () => {
+test('Soma reads use configured public URL even when a stale Worker binding exists', async () => {
 	vi.stubEnv('DEV', false);
-	const network = vi.fn();
+	const network = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => empty());
 	vi.stubGlobal('fetch', network);
 	const hub = { fetch: vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => empty()) };
 	const response = await POST(event({ ...env, SOMA_HUB: hub }));
 	expect(response.status).toBe(200);
-	expect(hub.fetch.mock.calls.map(([url]) => url)).toEqual([
+	expect(network.mock.calls.map(([url]) => url)).toEqual([
 		'https://hub.test/v1/rows/pull',
 		'https://hub.test/v1/catalog/projection'
 	]);
-	expect(network).not.toHaveBeenCalled();
+	expect(hub.fetch).not.toHaveBeenCalled();
+	for (const [, init] of network.mock.calls) {
+		expect(init?.headers).toMatchObject({ Authorization: 'Bearer test-only' });
+		expect(init?.redirect).toBe('manual');
+	}
 });
 
 test('without a binding (tests, local dev) Soma reads use the network', async () => {
-	const network = vi.fn(async () => empty());
+	const network = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => empty());
 	vi.stubGlobal('fetch', network);
 	expect((await POST(event(env))).status).toBe(200);
 	expect(network).toHaveBeenCalledTimes(2);
@@ -60,7 +64,7 @@ test('without a binding (tests, local dev) Soma reads use the network', async ()
 
 test('the dev server reaches the hub over the network: its platform proxy declares the binding with no hub Worker behind it', async () => {
 	vi.stubEnv('DEV', true);
-	const network = vi.fn(async () => empty());
+	const network = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => empty());
 	vi.stubGlobal('fetch', network);
 	const hub = {
 		fetch: vi.fn(async () => new Response('Worker "soma" not found', { status: 503 }))

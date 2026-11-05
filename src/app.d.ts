@@ -7,8 +7,6 @@ declare global {
 				SOMA_TASKS_CONFIG?: string;
 				SOMA_HUB_URL?: string;
 				SOMA_HUB_TOKEN?: string;
-				/** Service binding to the Soma hub Worker; absent in tests. The dev server declares it with no hub behind it, so dev reads use the network. */
-				SOMA_HUB?: { fetch: typeof fetch };
 			};
 			ctx: ExecutionContext;
 			caches: CacheStorage;

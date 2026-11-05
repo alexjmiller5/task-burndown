@@ -7,7 +7,6 @@ export type SomaEnv = {
 	SOMA_TASKS_CONFIG?: string;
 	SOMA_HUB_URL?: string;
 	SOMA_HUB_TOKEN?: string;
-	SOMA_HUB?: { fetch: typeof fetch };
 };
 type Field =
 	| 'created'
@@ -66,16 +65,10 @@ export function getSomaConfig(env: SomaEnv): Config | null {
 	return { binding, url: url.replace(/\/$/, ''), token };
 }
 
-/**
- * A Worker cannot fetch a sibling workers.dev Worker (Cloudflare error 1042):
- * reach the hub through its service binding when there is one. Call it as a
- * method; a detached binding fetch throws Illegal invocation. The dev server's
- * platform proxy declares the binding with no hub Worker behind it, so dev
- * uses the network.
- */
-export function hubFetch(env: SomaEnv): typeof fetch {
-	const hub = import.meta.env.DEV ? undefined : env.SOMA_HUB;
-	return hub ? (((input, init) => hub.fetch(input, init)) as typeof fetch) : fetch;
+// Use the configured public API and this consumer's existing scoped credential.
+// global_fetch_strictly_public permits same-account workers.dev requests.
+export function hubFetch(_env: SomaEnv): typeof fetch {
+	return fetch;
 }
 
 type Row = Record<string, unknown>;

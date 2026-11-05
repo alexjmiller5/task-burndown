@@ -191,14 +191,12 @@ completion date. Open tasks without a due date still count from their creation.
 and reads only its configured columns through the supported hub API using the
 app's own read credential, enrolled with the Soma profile
 `task-burndown-reader-v1` (projected task and project columns only). The Worker
-reaches the hub through the `SOMA_HUB` service binding (wrangler.jsonc `services`):
-Cloudflare blocks a Worker's network fetch to a sibling workers.dev Worker (error
-1042). The binding is transport only; auth stays the app's own token, and requests
-use `redirect: 'manual'` because Workers reject `'error'`. No backing
-infrastructure access or user schema
-literals belong here. Without the mapping or with JSON `null`, routes keep using Notion.
-In local dev (`import.meta.env.DEV`) `hubFetch` uses the network: the dev
-platform proxy declares the `SOMA_HUB` binding with no hub Worker behind it.
+reaches the configured public hub URL using its own read token. The
+global_fetch_strictly_public compatibility flag permits same-account workers.dev
+requests; no cross-project Worker binding is declared or consulted. Requests
+use redirect: 'manual' because Workers reject 'error'. No backing infrastructure
+access or user schema literals belong here. Without the mapping or with JSON
+null, routes keep using Notion.
 Tag colors come from the catalog, not the mapping: whenever a sync writes the
 cache (a non-quiet refresh or any chunk), `fetchTagColors` posts
 `/v1/catalog/projection` for the tags column and keeps each option's palette
