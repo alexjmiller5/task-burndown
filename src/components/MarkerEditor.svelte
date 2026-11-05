@@ -1,4 +1,5 @@
 <script lang="ts">
+	import MarkerDatePicker from './MarkerDatePicker.svelte';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import * as Select from '$lib/components/ui/select/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -127,19 +128,9 @@
 				<div
 					class="grid grid-cols-2 sm:grid-cols-[8.5rem_8.5rem_minmax(0,1fr)_9.5rem_auto] items-center gap-2 rounded-control border border-border-subtle p-2"
 				>
-					<Input
-						type="date"
-						bind:value={m.date}
-						aria-label="Date"
-						class="font-[var(--font-mono)] text-xs [color-scheme:dark]"
-					/>
+					<MarkerDatePicker bind:value={m.date} label="Date" />
 					{#if m.direction === 'flat'}
-						<Input
-							type="date"
-							bind:value={m.end}
-							aria-label="End date"
-							class="font-[var(--font-mono)] text-xs [color-scheme:dark]"
-						/>
+						<MarkerDatePicker bind:value={m.end} label="End date" minDate={m.date} />
 					{:else}
 						<span class="hidden sm:block text-center text-muted/50 text-xs">-</span>
 					{/if}
